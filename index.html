@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <div class="blobs"><i></i><i></i><i></i></div>
@@ -22,8 +22,8 @@
   <!-- desktop top bar -->
   <header class="topbar glass">
     <div class="brand"><img src="icons/icon-192.png" alt="">SIGNALS<span class="dim" style="font-weight:500">&nbsp;·&nbsp;Bybit</span></div>
-    <div class="tb-item"><div class="coin-ic ic-BTC">₿</div><div><div class="lbl">BTC/USDT</div><div class="val" id="tbBtcP">—</div><div class="sub" id="tbBtcC">—</div></div></div>
-    <div class="tb-item"><div class="coin-ic ic-ETH">Ξ</div><div><div class="lbl">ETH/USDT</div><div class="val" id="tbEthP">—</div><div class="sub" id="tbEthC">—</div></div></div>
+    <div class="tb-item"><div class="coin-ic ic-BTC">₿</div><div><div class="lbl">BTC/USDT</div><div class="val" id="tbBtcP" data-px="BTC">—</div><div class="sub" id="tbBtcC">—</div></div></div>
+    <div class="tb-item"><div class="coin-ic ic-ETH">Ξ</div><div><div class="lbl">ETH/USDT</div><div class="val" id="tbEthP" data-px="ETH">—</div><div class="sub" id="tbEthC">—</div></div></div>
     <div class="tb-item"><div style="text-align:center"><div class="lbl">Страх и жадность</div><canvas class="gauge" id="gauge" width="168" height="92"></canvas><div class="sub" id="tbFngT">—</div></div></div>
     <div class="tb-item"><div><div class="lbl">Funding (BTC)</div><div class="val" id="tbFund">—</div><div class="sub mut" id="tbFundN">—</div></div></div>
     <div class="tb-item" style="flex:1"><div><div class="lbl">Open Interest (BTC)</div><div class="val" id="tbOi">—</div><div class="sub" id="tbOiC">—</div></div><canvas class="spark" id="oiSpark" width="220" height="68" style="margin-left:auto"></canvas></div>
@@ -63,7 +63,7 @@
           <div class="row">
             <div class="coin-ic ic-BTC" style="width:42px;height:42px;font-size:18px">₿</div>
             <div class="col"><div style="font-weight:700">BTCUSDT</div><div class="mut" style="font-size:12px">Бессрочный фьючерс</div></div>
-            <div style="text-align:right"><div class="big" id="mBtcP">—</div><div id="mBtcC" style="font-size:14px">—</div></div>
+            <div style="text-align:right"><div class="big" id="mBtcP" data-px="BTC">—</div><div id="mBtcC" style="font-size:14px">—</div></div>
           </div>
           <div class="row">
             <div class="col"><div class="mut" style="font-size:13px">Страх и жадность</div><div style="font-size:20px;font-weight:700" id="mFng">—</div></div>
@@ -94,7 +94,7 @@
             <button class="iconbtn" id="refresh" title="Обновить"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
           </div>
         </div>
-        <div class="status"><span class="pill" id="src">Источник: —</span><span id="upd">Загрузка…</span><span id="cnt"></span></div>
+        <div class="status"><span class="pill" id="src">Источник: —</span><span class="pill live" id="live">○ подключение…</span><span id="upd">Загрузка…</span><span id="cnt"></span></div>
         <div class="progress"><i id="prog"></i></div>
         <div class="grid" id="grid"></div>
       </div>
@@ -157,6 +157,6 @@
 </div></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer onerror="window.__lwcFail=1"></script>
-<script src="app.js?v=1" defer></script>
+<script src="app.js?v=3" defer></script>
 </body>
 </html>

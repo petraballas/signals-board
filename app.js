@@ -35,7 +35,7 @@ const P = {
     async klines(id, tf, limit = 300) {
       const iv = { '15m': '15', '1h': '60', '4h': '240' }[tf];
       const j = await getJSON(`${this.base}/v5/market/kline?category=linear&symbol=${id}&interval=${iv}&limit=${limit}`);
-      if (j.retCode !== 0) throw new Error(j.retMsg);
+      if (j.retCode !== 0) throw new Error('API ' + j.retMsg);
       return j.result.list.map(r => ({ t: +r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4], v: +r[6] })).reverse();
     },
     async oiHist(id) {
@@ -68,7 +68,7 @@ const P = {
         turnover: +x.volume_24h_quote, funding: x.funding_rate === undefined ? null : +x.funding_rate, oiUsd: null }));
     },
     async klines(id, tf, limit = 300) {
-      const j = await getJSON(`${this.base}/futures/usdt/candlestick?contract=${id}&interval=${tf}&limit=${limit}`);
+      const j = await getJSON(`${this.base}/futures/usdt/candlesticks?contract=${id}&interval=${tf}&limit=${limit}`);
       return j.map(r => ({ t: r.t * 1000, o: +r.o, h: +r.h, l: +r.l, c: +r.c, v: +r.sum }));
     },
     async oiHist(id) {
@@ -77,8 +77,20 @@ const P = {
     },
   },
 };
-const ORDER = FORCE && P[FORCE] ? [FORCE, ...['bybit', 'okx', 'gate'].filter(x => x !== FORCE)] : ['bybit', 'okx', 'gate'];
+const ALL = ['bybit', 'okx', 'gate'];
 let PROV = null; // active provider key
+// Provider health: a provider that times out / is blocked (CORS, 403, 451, network) is skipped for 10 min,
+// so a geo-blocked Bybit doesn't cost a timeout on every refresh. Last working provider is remembered.
+const DEAD = {};
+const alive = k => !DEAD[k] || Date.now() - DEAD[k] > 6e5;
+function markDead(k, e) { const m = (e && e.message) || ''; if (!/429|HTTP 400|HTTP 404|^API/.test(m)) DEAD[k] = Date.now(); }
+function order() {
+  if (FORCE && P[FORCE]) return [FORCE, ...ALL.filter(x => x !== FORCE)];
+  let pref = null; try { pref = localStorage.getItem('sb_prov'); } catch (e) { }
+  const o = pref && ALL.includes(pref) ? [pref, ...ALL.filter(x => x !== pref)] : ALL.slice();
+  const a = o.filter(alive); return a.length ? a : o;
+}
+const ORDER = ALL;
 
 /* ---------- indicators ---------- */
 function ema(a, n) { const k = 2 / (n + 1), o = []; let e = null; for (let i = 0; i < a.length; i++) { e = e === null ? a[i] : a[i] * k + e * (1 - k); o.push(i < n - 1 ? null : e); } return o; }
@@ -185,16 +197,16 @@ const saveF = () => localStorage.setItem('sb_f', JSON.stringify({ setups: [...S.
 /* ---------- loading ---------- */
 async function loadTickers() {
   let lastErr;
-  for (const k of ORDER) {
-    try { const t = await P[k].tickers(); if (!t.length) throw new Error('empty'); PROV = k; return t; } catch (e) { lastErr = e; console.warn('tickers fail', k, e.message); }
+  for (const k of order()) {
+    try { const t = await P[k].tickers(); if (!t.length) throw new Error('empty'); PROV = k; delete DEAD[k]; if (!FORCE) try { localStorage.setItem('sb_prov', k); } catch (e) { } return t; }
+    catch (e) { lastErr = e; markDead(k, e); console.warn('tickers fail', k, e.message); }
   }
   throw lastErr;
 }
 async function klines(coin, tf) {
-  // Gate candles have no CORS headers in browsers → use Bybit/OKX candles first when Gate is the ticker source
   const idFor = k => k === PROV ? coin.id : k === 'bybit' ? coin.base + 'USDT' : k === 'okx' ? coin.base + '-USDT-SWAP' : coin.base + '_USDT';
-  const order = PROV === 'gate' ? ['bybit', 'okx', 'gate'] : [PROV, ...ORDER.filter(k => k !== PROV)];
-  let err; for (const k of order) { try { return await retry(() => P[k].klines(idFor(k), tf)); } catch (e) { err = e; } }
+  const ord = [PROV, ...ALL.filter(k => k !== PROV)].filter(k => alive(k) || k === PROV);
+  let err; for (const k of ord) { try { return await retry(() => P[k].klines(idFor(k), tf)); } catch (e) { err = e; markDead(k, e); } }
   throw err;
 }
 async function retry(fn) { for (let a = 0; ; a++) { try { return await fn(); } catch (e) { if (a < 2 && /429/.test(e.message)) { await new Promise(r => setTimeout(r, 900 * (a + 1))); continue; } throw e; } } }
@@ -213,15 +225,18 @@ async function cryptoSet() {
   if (!b) try { const j = await getJSON('https://www.okx.com/api/v5/public/instruments?instType=SWAP', 9000); b = j.data.filter(x => x.instCategory === '1').map(x => x.instId.split('-')[0]); } catch (e) { }
   if (!b) return null; localStorage.setItem('sb_cs', JSON.stringify({ t: Date.now(), b })); return new Set(b);
 }
-async function refreshMarket() {
+let mktBusy = null;
+function refreshMarket() { if (!mktBusy) mktBusy = _refreshMarket().finally(() => { mktBusy = null; }); return mktBusy; }
+async function _refreshMarket() {
   try {
     const [all, cs] = await Promise.all([loadTickers(), S.f.tradfi ? null : cryptoSet()]);
     const top = all.filter(x => !STABLE.test(x.base) && x.turnover > 0 && x.last > 0 && (!cs || cs.has(x.base))).sort((a, b) => b.turnover - a.turnover).slice(0, CFG.TOP);
     const prev = Object.fromEntries(S.coins.map(c => [c.base, c]));
-    S.coins = top.map(c => Object.assign(prev[c.base] || {}, c));
+    S.coins = top.map(c => { const o = prev[c.base]; if (o) o.prevTick = o.last; const r = Object.assign(o || {}, c); r.dirty = true; return r; });
     $('#src').textContent = 'Источник: ' + P[PROV].name + (PROV !== 'bybit' ? ' (резерв)' : '');
-    renderHeader(); renderMarkets();
-  } catch (e) { $('#upd').textContent = 'Нет связи с биржами — повторю через минуту'; }
+    S.lastMarket = Date.now(); renderHeader(); renderMarkets(); updatePricesUI();
+    const key = S.coins.map(c => c.base).join(',') + PROV; if (key !== LIVE.key) startLive();
+  } catch (e) { $('#upd').textContent = 'Нет связи с биржами — повторяю…'; }
   loadFng(); loadBtcExtras();
 }
 async function loadFng() { try { const j = await getJSON('https://api.alternative.me/fng/?limit=1', 7000); S.fng = { v: +j.data[0].value, cls: j.data[0].value_classification }; renderHeader(); } catch (e) { } }
@@ -319,13 +334,13 @@ function renderSignals() {
       </div><canvas class="mini" data-k="${s.coin.base + s.tf}" data-i="${i}"></canvas></div>
       <div class="reason">${esc(s.why)}</div>
       <div class="meta"><span>🕒 ${ago(s.t)}${s.fresh ? '' : ' · ждать ретест'}</span><span class="stars" title="Сила сигнала">${'★'.repeat(s.strength)}<span style="opacity:.25">${'★'.repeat(5 - s.strength)}</span></span></div>
-      <div class="meta"><span>Сейчас ${fmtP(s.coin.last)} <span class="${cls((s.coin.last / s.entry - 1) * (L ? 1 : -1))}">(${pct((s.coin.last / s.entry - 1) * 100)})</span></span><span>RSI ${s.rsi.toFixed(0)}</span></div>
+      <div class="meta"><span>Сейчас <b class="px" data-now="${esc(s.coin.base)}" data-entry="${s.entry}" data-dir="${s.dir}">${fmtP(s.coin.last)}</b> <span data-nowp="${esc(s.coin.base)}" class="${cls((s.coin.last / s.entry - 1) * (L ? 1 : -1))}">(${pct((s.coin.last / s.entry - 1) * 100)})</span></span><span>RSI ${s.rsi.toFixed(0)}</span></div>
     </div>`; }).join('');
   S.view = a;
-  requestAnimationFrame(() => $$('#grid canvas.mini').forEach(cv => drawMini(cv, a[+cv.dataset.i])));
+  requestAnimationFrame(() => $$('#grid canvas.mini').forEach(cv => drawMini(cv, S.view[+cv.dataset.i])));
 }
 function drawMini(cv, s) {
-  const an = S.an[s.coin.base + s.tf]; if (!an) return; const [x, w, h] = hidpi(cv); x.clearRect(0, 0, w, h);
+  if (!s || !cv.isConnected) return; const an = S.an[s.coin.base + s.tf]; if (!an) return; const [x, w, h] = hidpi(cv); x.clearRect(0, 0, w, h);
   const bars = an.bars.slice(-40), lines = [[s.tp2, '#3ddc97', 'Т2'], [s.tp1, '#3ddc97', 'Т1'], [s.entry, '#e8eaff', 'Вход'], [s.sl, '#ff5e7a', 'Стоп']];
   let mn = Math.min(...bars.map(b => b.l), ...lines.map(l => l[0])), mx = Math.max(...bars.map(b => b.h), ...lines.map(l => l[0])); const pad = (mx - mn) * 0.06; mn -= pad; mx += pad;
   const lblW = w < 230 ? 0 : 0, cw = w - lblW, Y = p => 4 + (mx - p) / (mx - mn) * (h - 8);
@@ -346,11 +361,11 @@ function drawMini(cv, s) {
 /* ---------- render: markets ---------- */
 function renderMarkets() {
   const tr = t => t === undefined ? '<span class="dim">…</span>' : t > 0 ? '<span class="tr-up">▲</span>' : t < 0 ? '<span class="tr-dn">▼</span>' : '<span class="tr-fl">◆</span>';
-  $('#mk').innerHTML = S.coins.map(c => `<tr data-b="${esc(c.base)}"><td><b>${esc(c.base)}</b></td><td>${fmtP(c.last)}</td><td class="${cls(c.chg)}">${pct(c.chg)}</td><td class="hide-m mut">${fmtBig(c.turnover)}</td><td class="${c.funding == null ? 'dim' : cls(c.funding)}">${c.funding == null ? '—' : (c.funding * 100).toFixed(4) + '%'}</td><td>${tr(c.tr1h)} ${tr(c.tr4h)}</td><td class="hide-m ${c.rsi1h > 70 ? 'down' : c.rsi1h < 30 ? 'up' : ''}">${c.rsi1h ? c.rsi1h.toFixed(0) : '—'}</td></tr>`).join('');
+  $('#mk').innerHTML = S.coins.map(c => `<tr data-b="${esc(c.base)}"><td><b>${esc(c.base)}</b></td><td class="px" data-px="${esc(c.base)}">${fmtP(c.last)}</td><td data-chg="${esc(c.base)}" class="${cls(c.chg)}">${pct(c.chg)}</td><td class="hide-m mut">${fmtBig(c.turnover)}</td><td data-fund="${esc(c.base)}" class="${c.funding == null ? 'dim' : cls(c.funding)}">${c.funding == null ? '—' : (c.funding * 100).toFixed(4) + '%'}</td><td>${tr(c.tr1h)} ${tr(c.tr4h)}</td><td class="hide-m ${c.rsi1h > 70 ? 'down' : c.rsi1h < 30 ? 'up' : ''}">${c.rsi1h ? c.rsi1h.toFixed(0) : '—'}</td></tr>`).join('');
 }
 
 /* ---------- modal + chart ---------- */
-let chart = null, curSig = null;
+let chart = null, curSig = null, chartSeries = null;
 async function openCoin(coin, tf, sig) {
   curSig = sig || null; $('#modal').classList.add('open'); document.body.style.overflow = 'hidden';
   $('#mTitle').textContent = coin.base + '/USDT · ' + TF_RU[tf]; $('#mSub').innerHTML = sig ? `<span class="${sig.dir === 'long' ? 'up' : 'down'}">${sig.dir === 'long' ? 'ЛОНГ' : 'ШОРТ'}</span> · ${TYPE_RU[sig.type]} · ${'★'.repeat(sig.strength)}` : 'Цена ' + fmtP(coin.last) + ' · ' + pct(coin.chg);
@@ -367,7 +382,7 @@ async function openCoin(coin, tf, sig) {
 }
 function drawBig(an, sig) {
   const el = $('#chart'); el.innerHTML = '';
-  if (chart) { chart.remove(); chart = null; }
+  chartSeries = null; if (chart) { chart.remove(); chart = null; }
   if (!an) { el.innerHTML = '<div class="empty">Не удалось загрузить свечи</div>'; return; }
   if (!window.LightweightCharts) { el.innerHTML = '<canvas style="width:100%;height:100%"></canvas>'; if (sig) drawMini(el.firstChild, sig); return; }
   const off = -new Date().getTimezoneOffset() * 60, T = t => Math.floor(t / 1000) + off;
@@ -375,7 +390,7 @@ function drawBig(an, sig) {
     grid: { vertLines: { color: 'rgba(255,255,255,.04)' }, horzLines: { color: 'rgba(255,255,255,.04)' } }, rightPriceScale: { borderColor: 'rgba(255,255,255,.1)' },
     timeScale: { borderColor: 'rgba(255,255,255,.1)', timeVisible: true }, crosshair: { mode: 0 } });
   const cs = chart.addCandlestickSeries({ upColor: '#3ddc97', downColor: '#ff5e7a', borderVisible: false, wickUpColor: '#3ddc97', wickDownColor: '#ff5e7a', priceFormat: { type: 'price', precision: dec(an.last), minMove: Math.pow(10, -dec(an.last)) } });
-  cs.setData(an.bars.map(b => ({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c })));
+  chartSeries = { cs, an, T }; cs.setData(an.bars.map(b => ({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c })));
   const line = (arr, color, w = 1.5) => { const s = chart.addLineSeries({ color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }); s.setData(arr.map((v, i) => v == null ? null : { time: T(an.closed[i].t), value: v }).filter(Boolean)); };
   line(an.e20, 'rgba(139,124,255,.9)'); line(an.e50, 'rgba(255,198,92,.85)'); line(an.vw, 'rgba(90,200,250,.7)', 1);
   const pl = (p, color, title, style = 2) => cs.createPriceLine({ price: p, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title });
@@ -385,7 +400,7 @@ function drawBig(an, sig) {
   chart.timeScale().setVisibleLogicalRange({ from: an.bars.length - 90, to: an.bars.length + 3 });
 }
 const dec = p => { const a = Math.abs(p); return a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 3 : a >= 0.1 ? 4 : a >= 0.01 ? 5 : a >= 0.001 ? 6 : 8; };
-function closeModal() { $('#modal').classList.remove('open'); document.body.style.overflow = ''; if (chart) { chart.remove(); chart = null; } }
+function closeModal() { $('#modal').classList.remove('open'); document.body.style.overflow = ''; chartSeries = null; if (chart) { chart.remove(); chart = null; } }
 
 /* ---------- calculator ---------- */
 const C = { dir: 'long' };
@@ -454,13 +469,91 @@ function wire() {
   try { const c = JSON.parse(localStorage.getItem('sb_c') || '{}'); if (c.dep) $('#cDep').value = c.dep; if (c.risk) $('#cRisk').value = c.risk; if (c.lev) $('#cLev').value = c.lev; } catch (e) { }
   $$('.tabbar button').forEach(b => b.onclick = () => tab(b.dataset.tab));
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { renderSignals(); renderHeader(); }, 200); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.lastScan && Date.now() - S.lastScan > CFG.REFRESH_SIGNALS) { refreshMarket().then(refreshSignals); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) return; refreshMarket(); if (!liveOk()) startLive(); if (S.lastScan && Date.now() - S.lastScan > CFG.REFRESH_SIGNALS) refreshSignals(); });
+  addEventListener('pageshow', e => { if (e.persisted) { refreshMarket(); startLive(); } });
+  addEventListener('online', () => { refreshMarket(); startLive(); });
 }
 function tab(t) { $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t)); scrollTo(0, 0); if (t === 'signals') renderSignals(); }
+
+/* ---------- live prices (WebSocket, with provider fallback) ---------- */
+const now = () => Math.floor(Date.now() / 1000);
+const chunk = (a, n) => a.reduce((r, x, i) => (i % n ? r[r.length - 1].push(x) : r.push([x]), r), []);
+const WSP = {
+  bybit: { url: 'wss://stream.bybit.com/v5/public/linear', sym: c => c.base + 'USDT',
+    subs: ids => chunk(ids.map(i => 'tickers.' + i), 10).map(a => ({ op: 'subscribe', args: a })), ping: () => ({ op: 'ping' }),
+    parse: m => { if (!m.topic || !m.data || !m.data.symbol) return; const d = m.data; return [{ id: d.symbol, last: d.lastPrice, chg: d.price24hPcnt !== undefined ? +d.price24hPcnt * 100 : undefined, funding: d.fundingRate, oiUsd: d.openInterestValue }]; } },
+  okx: { url: 'wss://ws.okx.com/ws/v5/public', sym: c => c.base + '-USDT-SWAP',
+    subs: ids => chunk(ids.map(i => ({ channel: 'tickers', instId: i })), 20).map(a => ({ op: 'subscribe', args: a })), ping: () => 'ping',
+    parse: m => { if (!m.data || !m.arg || m.arg.channel !== 'tickers') return; return m.data.map(d => ({ id: d.instId, last: d.last, chg: (+d.last / +d.open24h - 1) * 100 })); } },
+  gate: { url: 'wss://fx-ws.gateio.ws/v4/ws/usdt', sym: c => c.base + '_USDT',
+    subs: ids => [{ time: now(), channel: 'futures.tickers', event: 'subscribe', payload: ids }], ping: () => ({ time: now(), channel: 'futures.ping' }),
+    parse: m => { if (m.channel !== 'futures.tickers' || m.event !== 'update' || !Array.isArray(m.result)) return; return m.result.map(d => ({ id: d.contract, last: d.last, chg: d.change_percentage !== undefined ? +d.change_percentage : undefined, funding: d.funding_rate })); } },
+};
+const LIVE = { ws: null, prov: null, last: 0, started: 0, key: '', tried: [], pingT: null, gen: 0 };
+const liveOk = () => LIVE.ws && Date.now() - LIVE.last < 20e3;
+function stopLive() { LIVE.gen++; clearInterval(LIVE.pingT); if (LIVE.ws) { try { LIVE.ws.onclose = null; LIVE.ws.close(); } catch (e) { } } LIVE.ws = null; }
+function startLive(skipCurrent) {
+  if (!S.coins.length || typeof WebSocket === 'undefined') return;
+  const pref = [PROV, ...ALL.filter(k => k !== PROV)].filter(Boolean);
+  if (skipCurrent && LIVE.prov) LIVE.tried.push(LIVE.prov); else if (!skipCurrent) LIVE.tried = [];
+  let k = pref.find(x => !LIVE.tried.includes(x)); if (!k) { LIVE.tried = []; k = pref[0]; }
+  stopLive(); const gen = LIVE.gen, W = WSP[k];
+  LIVE.prov = k; LIVE.started = Date.now(); LIVE.last = 0; LIVE.key = S.coins.map(c => c.base).join(',') + PROV;
+  // map provider symbol -> coin (same provider: use its own id, e.g. 1000PEPEUSDT)
+  const map = {}; S.coins.forEach(c => { map[k === PROV ? c.id : W.sym(c)] = c; });
+  let ws; try { ws = new WebSocket(W.url); } catch (e) { return; }
+  LIVE.ws = ws;
+  ws.onopen = () => { if (gen !== LIVE.gen) return; W.subs(Object.keys(map)).forEach(m => ws.send(JSON.stringify(m))); LIVE.pingT = setInterval(() => { try { const p = W.ping(); ws.send(typeof p === 'string' ? p : JSON.stringify(p)); } catch (e) { } }, 18e3); };
+  ws.onmessage = e => { if (gen !== LIVE.gen || e.data === 'pong') return; let m; try { m = JSON.parse(e.data); } catch (x) { return; } const ticks = W.parse(m); if (!ticks) return;
+    for (const t of ticks) applyTick(map[t.id], t); };
+  ws.onerror = () => { };
+  ws.onclose = () => { if (gen !== LIVE.gen) return; const quick = !LIVE.last; LIVE.ws = null; setLivePill(); setTimeout(() => { if (gen === LIVE.gen) startLive(quick); }, quick ? 500 : 3000); };
+  // no ticks within 8s → try next provider
+  setTimeout(() => { if (gen === LIVE.gen && !LIVE.last) startLive(true); }, 8000);
+  setLivePill();
+}
+function applyTick(c, t) {
+  if (!c) return; const p = +t.last;
+  if (t.last !== undefined && t.last !== '' && isFinite(p) && p > 0) {
+    if (c.last && Math.abs(p / c.last - 1) > 0.25) return; // symbol mismatch guard (e.g. 1000x contracts)
+    c.prevTick = c.last; c.last = p; LIVE.last = Date.now(); c.tickAt = LIVE.last;
+    for (const tf of CFG.TFS) { const an = S.an[c.base + tf]; if (!an) continue; const b = an.bars, L = b[b.length - 1], ms = tfMs(tf);
+      if (Date.now() >= L.t + ms) { const t0 = L.t + Math.floor((Date.now() - L.t) / ms) * ms; b.push({ t: t0, o: p, h: p, l: p, c: p, v: 0 }); } else { L.c = p; if (p > L.h) L.h = p; if (p < L.l) L.l = p; }
+      an.last = p; }
+  } else if (t.funding === undefined && t.chg === undefined) return;
+  if (t.chg !== undefined && isFinite(t.chg)) c.chg = t.chg;
+  if (t.funding !== undefined && t.funding !== '' && isFinite(+t.funding)) c.funding = +t.funding;
+  if (t.oiUsd !== undefined && isFinite(+t.oiUsd) && +t.oiUsd > 0) c.oiUsd = +t.oiUsd;
+  c.dirty = true; scheduleUI();
+}
+let uiT = null, lastUI = 0, lastMini = 0;
+function scheduleUI() { if (uiT) return; const wait = Math.max(0, 700 - (Date.now() - lastUI)); uiT = setTimeout(() => { uiT = null; lastUI = Date.now(); requestAnimationFrame(updatePricesUI); }, wait); }
+function flash(el, up) { el.classList.remove('tk-up', 'tk-dn'); void el.offsetWidth; el.classList.add(up ? 'tk-up' : 'tk-dn'); }
+function updatePricesUI() {
+  for (const c of S.coins) {
+    if (!c.dirty && !c.prevTick) continue; const up = c.prevTick == null ? null : c.last > c.prevTick ? true : c.last < c.prevTick ? false : null;
+    $$(`[data-px="${c.base}"]`).forEach(el => { const t = fmtP(c.last); if (el.textContent !== t) { el.textContent = t; if (up !== null) flash(el, up); } });
+    $$(`[data-chg="${c.base}"]`).forEach(el => { el.textContent = pct(c.chg); el.className = cls(c.chg); });
+    $$(`[data-fund="${c.base}"]`).forEach(el => { if (c.funding != null) { el.textContent = (c.funding * 100).toFixed(4) + '%'; el.className = cls(c.funding); } });
+    $$(`[data-now="${c.base}"]`).forEach(el => { const t = fmtP(c.last); if (el.textContent !== t) { el.textContent = t; if (up !== null) flash(el, up); }
+      const e = +el.dataset.entry, L = el.dataset.dir === 'long', d = (c.last / e - 1) * 100, sp = el.nextElementSibling; if (sp) { sp.textContent = '(' + pct(d) + ')'; sp.className = cls(d * (L ? 1 : -1)); } });
+    c.dirty = false; c.prevTick = null;
+  }
+  if (Date.now() - lastMini > 4000 && S.view) { lastMini = Date.now(); $$('#grid canvas.mini').forEach(cv => { const s = S.view[+cv.dataset.i]; if (s && s.coin.tickAt && s.coin.tickAt > (cv._t || 0)) { cv._t = Date.now(); drawMini(cv, s); } }); }
+  if (chartSeries) { const { cs, an, T } = chartSeries, b = an.bars[an.bars.length - 1]; try { cs.update({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); } catch (e) { } }
+  renderHeader(); setLivePill();
+}
+function setLivePill() {
+  const el = $('#live'); if (!el) return;
+  if (liveOk()) { el.className = 'pill live on'; el.textContent = '● LIVE · ' + P[LIVE.prov].name; }
+  else { el.className = 'pill live'; el.textContent = S.lastMarket ? '○ цены: REST · ' + timeStr(new Date(S.lastMarket)) : '○ подключение…'; }
+}
 
 /* ---------- boot ---------- */
 wire(); syncFilterUI(); calc();
 refreshMarket().then(refreshSignals);
-setInterval(() => { if (!document.hidden) refreshMarket().then(() => { if (S.view) renderSignals(); }); }, CFG.REFRESH_MARKET);
+// REST price polling: every 60s normally, every 8s whenever the live stream is not healthy
+setInterval(() => { if (document.hidden) return; const age = Date.now() - (S.lastMarket || 0); if (age > CFG.REFRESH_MARKET || (!liveOk() && age > 8e3)) refreshMarket(); }, 4e3);
+setInterval(() => { if (!document.hidden && S.coins.length && !liveOk() && Date.now() - LIVE.started > 15e3) startLive(); setLivePill(); }, 5e3);
 setInterval(() => { if (!document.hidden) refreshSignals(); }, CFG.REFRESH_SIGNALS);
 setInterval(() => { if (S.lastScan) $('#upd').textContent = 'Обновлено ' + timeStr(S.lastScan) + ' · авто каждые 3 мин'; }, 30e3);
