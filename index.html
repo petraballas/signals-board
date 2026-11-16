@@ -1,1115 +1,162 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark light" />
-  <title>Доска сигналов Bybit</title>
-  <style>
-    :root {
-      --bg: var(--tg-theme-bg-color, #0b0d12);
-      --bg-subtle: var(--tg-theme-secondary-bg-color, #12151c);
-      --card: var(--tg-theme-section-bg-color, #1a1e27);
-      --text: var(--tg-theme-text-color, #f3f5f9);
-      --muted: var(--tg-theme-hint-color, #8b93a7);
-      --sub: var(--tg-theme-subtitle-text-color, #a8b0c0);
-      --accent: var(--tg-theme-accent-text-color, var(--tg-theme-link-color, #5aa7ff));
-      --btn: var(--tg-theme-button-color, #3d8bfd);
-      --btn-text: var(--tg-theme-button-text-color, #ffffff);
-      --danger: var(--tg-theme-destructive-text-color, #ff5d6c);
-      --success: #3ee09a;
-      --warning: #f0b429;
-      --line: color-mix(in srgb, var(--text) 14%, transparent);
-      --line-strong: color-mix(in srgb, var(--text) 28%, transparent);
-      --fill: color-mix(in srgb, var(--text) 8%, transparent);
-      --fill-strong: color-mix(in srgb, var(--text) 14%, transparent);
-      --success-dim: color-mix(in srgb, var(--success) 18%, transparent);
-      --danger-dim: color-mix(in srgb, var(--danger) 18%, transparent);
-      --accent-dim: color-mix(in srgb, var(--accent) 18%, transparent);
-      --warning-dim: color-mix(in srgb, var(--warning) 18%, transparent);
-      --safe-t: var(--tg-safe-area-inset-top, env(safe-area-inset-top, 0px));
-      --safe-b: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
-      --cs-t: var(--tg-content-safe-area-inset-top, 0px);
-      --radius: 12px;
-      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      min-height: 100%;
-      min-height: var(--tg-viewport-stable-height, 100dvh);
-    }
-    body { padding-top: calc(var(--safe-t) + var(--cs-t)); }
-    button, input, select { font-family: inherit; }
-    button { color: inherit; }
-    .app { max-width: 880px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; }
-    .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 10px; gap: 10px; }
-    .brand { display: flex; gap: 10px; align-items: center; min-width: 0; }
-    .logo {
-      width: 36px; height: 36px; border-radius: 12px; background: var(--accent-dim);
-      color: var(--accent); display: flex; align-items: center; justify-content: center;
-      font-weight: 600; flex-shrink: 0; font-size: 13px;
-    }
-    .title { font-weight: 600; font-size: 20px; line-height: 26px; }
-    .subtitle { color: var(--muted); font-size: 11px; line-height: 16px; }
-    .live { display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 11px; font-weight: 500; }
-    .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
-    .dot.on { background: var(--success); animation: pulse 1.6s ease-in-out infinite; }
-    .ticker { overflow: hidden; border-bottom: 1px solid var(--line); background: var(--bg-subtle); padding: 8px 0; }
-    .ticker-track { display: flex; width: max-content; animation: ticker 22s linear infinite; }
-    .ticker-row { display: flex; gap: 28px; padding-right: 28px; flex-shrink: 0; }
-    .tick { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; font-size: 14px; }
-    .tick b { font-weight: 600; }
-    .tick .px { color: var(--sub); }
-    .up { color: var(--success); font-weight: 500; }
-    .down { color: var(--danger); font-weight: 500; }
-    .page { flex: 1; padding: 8px 16px 20px; }
-    .hero { padding: 18px 4px 8px; }
-    .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--sub); font-size: 14px; }
-    .hero-num { font-size: 56px; line-height: 60px; font-weight: 600; letter-spacing: -0.04em; margin: 6px 0 4px; }
-    .hero-bias { font-size: 16px; line-height: 24px; margin-bottom: 4px; }
-    .hero-top-sig { color: var(--sub); font-size: 14px; }
-    .bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--danger-dim); margin-top: 14px; }
-    .bar > span { background: var(--success); height: 100%; }
-    .bar-labels { display: flex; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: 11px; }
-    .note { color: var(--muted); font-size: 11px; margin-top: 8px; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-    .card, .agent, .feed, .sig {
-      background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius);
-    }
-    .agent {
-      display: block; width: 100%; text-align: left; padding: 14px; cursor: pointer;
-      background: var(--card); border: 1px solid var(--line-strong);
-    }
-    .agent-top { display: flex; gap: 10px; align-items: center; }
-    .icon {
-      width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    }
-    .agent-name { font-weight: 600; font-size: 14px; }
-    .agent-sub { color: var(--muted); font-size: 11px; }
-    .agent-status { margin-top: 12px; font-size: 13px; line-height: 18px; min-height: 40px; animation: fade .45s ease; }
-    .agent-stats { margin-top: 8px; color: var(--muted); font-size: 11px; }
-    .feed { padding: 14px; margin-top: 16px; }
-    .feed-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-    .feed-head b { font-weight: 600; }
-    .feed-head span { color: var(--muted); font-size: 11px; }
-    .row {
-      display: flex; gap: 10px; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line);
-      background: transparent; padding: 7px 0; cursor: pointer;
-    }
-    .row-dot { width: 8px; height: 8px; border-radius: 999px; margin-top: 6px; flex-shrink: 0; }
-    .row-time { color: var(--muted); font-size: 11px; width: 44px; flex-shrink: 0; padding-top: 1px; }
-    .row-text { color: var(--sub); font-size: 13px; line-height: 18px; }
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center;
-      background: var(--btn); color: var(--btn-text); border: 0; border-radius: 999px;
-      padding: 10px 16px; font-weight: 600; font-size: 14px; cursor: pointer;
-    }
-    .btn[disabled] { opacity: .6; cursor: default; }
-    .btn.quiet { background: var(--fill-strong); color: var(--text); }
-    .btn.block { width: 100%; margin-top: 12px; }
-    .pill {
-      display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--fill-strong);
-      color: var(--sub); font-size: 11px; line-height: 16px; margin-right: 6px; margin-bottom: 4px;
-    }
-    .pill.ok { background: var(--success-dim); color: var(--success); }
-    .pill.bad { background: var(--danger-dim); color: var(--danger); }
-    .pill.acc { background: var(--accent-dim); color: var(--accent); }
-    .callout { border-radius: var(--radius); padding: 12px; margin: 10px 0; background: var(--warning-dim); color: var(--text); font-size: 14px; line-height: 20px; }
-    .callout b { display: block; margin-bottom: 4px; }
-    .callout.danger { background: var(--danger-dim); }
-    .props { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 10px 0; font-size: 14px; }
-    .props .k { color: var(--muted); font-size: 11px; }
-    .sig { padding: 14px; }
-    .sig-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-    .sig-head b { font-size: 20px; }
-    .sig-time { color: var(--muted); font-size: 11px; }
-    .sig p, .page p, .section p { color: var(--sub); font-size: 14px; line-height: 20px; }
-    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-    .seg { display: flex; background: var(--fill); border-radius: 999px; padding: 3px; }
-    .seg button { border: 0; background: transparent; color: var(--muted); padding: 8px 10px; border-radius: 999px; cursor: pointer; font-size: 13px; }
-    .seg button.on { background: var(--fill-strong); color: var(--text); font-weight: 600; }
-    label.field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); min-width: 120px; flex: 1; }
-    label.field input, label.field select {
-      background: var(--fill); border: 1px solid var(--line-strong); color: var(--text);
-      border-radius: 10px; padding: 10px 12px; font-size: 16px;
-    }
-    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
-    .metric { background: var(--bg-subtle); border-radius: 10px; padding: 10px 12px; }
-    .metric b { display: block; font-size: 20px; }
-    .metric span { color: var(--muted); font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
-    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-    th { color: var(--muted); font-weight: 500; font-size: 11px; }
-    .chart { width: 100%; display: block; background: var(--bg-subtle); border-radius: 8px; margin: 10px 0; }
-    .section h2 { font-size: 20px; margin: 16px 0 8px; }
-    .section .cap { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
-    .toasts { position: fixed; top: calc(8px + var(--safe-t) + var(--cs-t)); left: 12px; right: 12px; z-index: 30; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: 856px; margin: 0 auto; }
-    .toast {
-      pointer-events: auto; background: var(--card); border: 1px solid var(--line-strong);
-      border-left-width: 4px; border-radius: var(--radius); padding: 10px 12px;
-      display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
-      animation: toastIn .45s ease-out;
-    }
-    .toast.long { border-left-color: var(--success); }
-    .toast.short { border-left-color: var(--danger); }
-    .toast .k { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
-    .toast .t { font-weight: 600; font-size: 14px; }
-    .toast .d { color: var(--sub); font-size: 11px; margin-top: 2px; }
-    .toast .x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px; }
-    .tabs {
-      display: flex; gap: 6px; padding: 10px 10px calc(12px + var(--safe-b));
-      border-top: 1px solid var(--line); background: var(--card); position: sticky; bottom: 0;
-    }
-    .tabs button {
-      flex: 1; border: 0; border-radius: 999px; padding: 10px 6px; cursor: pointer;
-      background: transparent; color: var(--muted); font-weight: 500; font-size: 11px;
-    }
-    .tabs button.on { background: var(--fill-strong); color: var(--text); font-weight: 600; }
-    .hide { display: none !important; }
-    .warn { margin-top: 8px; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-    @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-    @keyframes toastIn { from { transform: translateY(-16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) {
-      .ticker-track, .dot.on, .toast, .agent-status { animation: none !important; }
-    }
-    @media (max-width: 560px) {
-      .hero-num { font-size: 48px; line-height: 52px; }
-      .metrics { grid-template-columns: 1fr 1fr; }
-      .props { grid-template-columns: 1fr; }
-      table { font-size: 12px; }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Signals — доска сигналов Bybit</title>
+<meta name="description" content="Визуальная доска сигналов по фьючерсам Bybit USDT: пробои, отскоки, откаты. Не финансовый совет.">
+<meta name="theme-color" content="#05060d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Signals">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css?v=1">
 </head>
 <body>
-  <div class="toasts" id="toasts"></div>
-  <div class="app">
-    <header class="header">
-      <div class="brand">
-        <div class="logo">Эз</div>
-        <div>
-          <div class="title">Доска сигналов</div>
-          <div class="subtitle">Bybit USDT-перпы · 13 пар · 4 сканера · <span id="clock">--:--</span> Екб</div>
+<div class="blobs"><i></i><i></i><i></i></div>
+<div class="app">
+
+  <!-- desktop top bar -->
+  <header class="topbar glass">
+    <div class="brand"><img src="icons/icon-192.png" alt="">SIGNALS<span class="dim" style="font-weight:500">&nbsp;·&nbsp;Bybit</span></div>
+    <div class="tb-item"><div class="coin-ic ic-BTC">₿</div><div><div class="lbl">BTC/USDT</div><div class="val" id="tbBtcP">—</div><div class="sub" id="tbBtcC">—</div></div></div>
+    <div class="tb-item"><div class="coin-ic ic-ETH">Ξ</div><div><div class="lbl">ETH/USDT</div><div class="val" id="tbEthP">—</div><div class="sub" id="tbEthC">—</div></div></div>
+    <div class="tb-item"><div style="text-align:center"><div class="lbl">Страх и жадность</div><canvas class="gauge" id="gauge" width="168" height="92"></canvas><div class="sub" id="tbFngT">—</div></div></div>
+    <div class="tb-item"><div><div class="lbl">Funding (BTC)</div><div class="val" id="tbFund">—</div><div class="sub mut" id="tbFundN">—</div></div></div>
+    <div class="tb-item" style="flex:1"><div><div class="lbl">Open Interest (BTC)</div><div class="val" id="tbOi">—</div><div class="sub" id="tbOiC">—</div></div><canvas class="spark" id="oiSpark" width="220" height="68" style="margin-left:auto"></canvas></div>
+  </header>
+
+  <div class="main">
+    <!-- filters (desktop) -->
+    <aside class="side-col"><div class="side glass">
+      <h3><span>⚲ Фильтры</span><button class="iconbtn" id="resetTop" title="Сбросить" style="width:32px;height:32px">↺</button></h3>
+      <button class="fbtn" data-setup="breakout">⚡ Пробой<span class="ck">✓</span></button>
+      <button class="fbtn" data-setup="bounce">〰 Отскок<span class="ck">✓</span></button>
+      <button class="fbtn" data-setup="pullback">↘ Откат<span class="ck">✓</span></button>
+      <div class="sep"></div>
+      <button class="fbtn long" data-dir="long">→ Лонг<span class="ck">✓</span></button>
+      <button class="fbtn short" data-dir="short">↘ Шорт<span class="ck">✓</span></button>
+      <div class="sep"></div>
+      <div class="field"><label>Таймфрейм</label>
+        <div class="seg" id="tfSeg"><button data-v="all" class="on">Все</button><button data-v="15m">15м</button><button data-v="1h">1ч</button><button data-v="4h">4ч</button></div></div>
+      <div class="field"><label>Мин. сила сигнала</label>
+        <div class="seg" id="strSeg"><button data-v="1" class="on">1+</button><button data-v="3">3+</button><button data-v="4">4+</button></div></div>
+      <button class="fbtn" data-tradfi="1">📈 Акции и металлы<span class="ck">✓</span></button>
+      <div class="field"><label>Поиск монеты</label><input class="search" id="q" placeholder="например, SOL" autocomplete="off"></div>
+      <div class="sep"></div>
+      <div class="legend">
+        <div><span class="dot" style="background:var(--green)"></span><span><b style="color:var(--txt)">ЛОНГ</b><br>Бычий сигнал</span></div>
+        <div><span class="dot" style="background:var(--red)"></span><span><b style="color:var(--txt)">ШОРТ</b><br>Медвежий сигнал</span></div>
+      </div>
+      <div class="sep"></div>
+      <button class="ghost" id="resetBtn">↺ Сбросить фильтры</button>
+    </div></aside>
+
+    <!-- center -->
+    <section class="center-col">
+      <div class="view on" id="v-signals">
+        <!-- mobile summary -->
+        <div class="summary glass mob-only">
+          <div class="row">
+            <div class="coin-ic ic-BTC" style="width:42px;height:42px;font-size:18px">₿</div>
+            <div class="col"><div style="font-weight:700">BTCUSDT</div><div class="mut" style="font-size:12px">Бессрочный фьючерс</div></div>
+            <div style="text-align:right"><div class="big" id="mBtcP">—</div><div id="mBtcC" style="font-size:14px">—</div></div>
+          </div>
+          <div class="row">
+            <div class="col"><div class="mut" style="font-size:13px">Страх и жадность</div><div style="font-size:20px;font-weight:700" id="mFng">—</div></div>
+            <div class="vline"></div>
+            <div class="col"><div class="mut" style="font-size:13px">Funding BTC</div><div style="font-size:20px;font-weight:700" id="mFund">—</div></div>
+            <div class="vline"></div>
+            <div class="col"><div class="mut" style="font-size:13px">Тренд BTC 4ч</div><div style="font-size:16px;font-weight:700" id="mTrend">—</div></div>
+          </div>
+        </div>
+        <div class="chips mob-only" id="chips">
+          <button class="chip" data-setup="breakout">⚡ Пробой</button>
+          <button class="chip" data-setup="bounce">〰 Отскок</button>
+          <button class="chip" data-setup="pullback">↘ Откат</button>
+          <button class="chip long" data-dir="long">Лонг</button>
+          <button class="chip short" data-dir="short">Шорт</button>
+          <button class="chip" data-tfc="15m">15м</button>
+          <button class="chip" data-tfc="1h">1ч</button>
+          <button class="chip" data-tfc="4h">4ч</button>
+          <button class="chip" data-str="4">★4+</button>
+          <button class="chip" data-tradfi="1">📈 Акции/металлы</button>
+        </div>
+        <div class="head">
+          <div><h1>Сигналы</h1><p>Сетапы по фьючерсам Bybit USDT · топ-30 по обороту</p></div>
+          <div class="right">
+            <select class="iconbtn" id="sort" style="width:auto;padding:0 10px;font-size:13px">
+              <option value="new">Новые сверху</option><option value="str">По силе</option><option value="rr">По R:R</option>
+            </select>
+            <button class="iconbtn" id="refresh" title="Обновить"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+          </div>
+        </div>
+        <div class="status"><span class="pill" id="src">Источник: —</span><span id="upd">Загрузка…</span><span id="cnt"></span></div>
+        <div class="progress"><i id="prog"></i></div>
+        <div class="grid" id="grid"></div>
+      </div>
+
+      <div class="view" id="v-markets" style="margin-top:22px">
+        <div class="head"><div><h1>Рынки</h1><p>Топ монет по обороту · тренд по EMA20/50, RSI(14)</p></div></div>
+        <div class="glass" style="padding:6px 6px;overflow-x:auto">
+          <table class="mk"><thead><tr><th>Монета</th><th>Цена</th><th>24ч</th><th class="hide-m">Оборот</th><th>Funding</th><th>Тренд 1ч/4ч</th><th class="hide-m">RSI 1ч</th></tr></thead><tbody id="mk"></tbody></table>
         </div>
       </div>
-      <div class="live"><span class="dot" id="liveDot"></span><span id="liveLabel">Снимок</span></div>
-    </header>
-    <div class="ticker" id="ticker"></div>
-    <main class="page" id="page"></main>
-    <nav class="tabs" id="tabs"></nav>
+
+      <div class="view" id="v-info" style="margin-top:22px">
+        <div class="glass" style="padding:16px 18px;font-size:14px;line-height:1.5">
+          <h3 style="margin:0 0 8px">Как читать сигналы</h3>
+          <p style="margin:6px 0"><b>⚡ Пробой</b> — закрытие свечи за максимумом/минимумом последних 30 свечей с повышенным объёмом. Стоп за пробитым уровнем (с запасом по ATR).</p>
+          <p style="margin:6px 0"><b>〰 Отскок</b> — касание уровня поддержки/сопротивления (кластер свинг-точек с 2+ касаниями) и закрытие с отбоем. RSI должен быть не перегрет в сторону сделки.</p>
+          <p style="margin:6px 0"><b>↘ Откат</b> — тренд по EMA20 &gt; EMA50 (или наоборот), цена откатила к EMA20 и закрылась в сторону тренда.</p>
+          <p style="margin:6px 0"><b>Сила ★</b> учитывает: тренд старшего ТФ, объём, положение к VWAP и Volume Profile (POC/VAH/VAL), RSI, funding, R:R. Стопы считаются от ATR(14).</p>
+          <p style="margin:6px 0" class="mut">Сигналы считаются только по закрытым свечам. Вход — цена закрытия сигнальной свечи; если цена ушла далеко от входа, лучше дождаться ретеста.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- calculator -->
+    <aside class="calc-col view" id="v-calc"><div class="calc glass">
+      <h3><span>▦ Калькулятор позиции</span></h3>
+      <div class="field"><label>Направление</label><div class="seg dir" id="cDir"><button data-v="long" class="on">ЛОНГ</button><button data-v="short">ШОРТ</button></div></div>
+      <div class="field"><label>Депозит (USDT)</label><div class="inp"><input id="cDep" inputmode="decimal" value="90"><span class="u">USDT</span></div></div>
+      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Риск на сделку</label><div class="inp"><input id="cRisk" inputmode="decimal" value="1"><span class="u">%</span></div></div>
+        <div><label>Плечо</label><div class="inp"><input id="cLev" inputmode="decimal" value="10"><span class="u">x</span></div></div>
+      </div>
+      <div class="field"><label>Цена входа</label><div class="inp"><input id="cEntry" inputmode="decimal" placeholder="нажми на сигнал"></div></div>
+      <div class="field"><label>Стоп-лосс</label><div class="inp sl"><input id="cSl" inputmode="decimal"></div></div>
+      <div class="field"><label>Тейк-профит</label><div class="inp tp"><input id="cTp" inputmode="decimal"></div></div>
+      <div class="sep"></div>
+      <div class="res" id="cRes"><div class="mut">Введи вход и стоп — расчёт появится здесь.</div></div>
+      <div id="cWarn"></div>
+      <div class="dim" style="font-size:11px;margin-top:10px">Ликвидация — оценка для изолированной маржи (ММ ≈ 0.5%). В кроссе зависит от всего баланса. Комиссии не учтены.</div>
+    </div></aside>
   </div>
-  <script>
 
-const SYMBOLS = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","BNBUSDT","LINKUSDT","AVAXUSDT","SUIUSDT","ADAUSDT","YFIUSDT","BIOUSDT","ONDOUSDT"];
-const USER_COINS = new Set(["YFI","BIO","ONDO"]);
-const TYPE_LABEL = { breakout: "Пробой уровня", bounce: "Отскок от уровня", pullback: "Откат по тренду" };
-const TYPE_SHORT = { breakout: "Пробой", bounce: "Отскок", pullback: "Откат" };
-const SIDE_LABEL = { long: "Лонг", short: "Шорт" };
-const TF_LABEL = { "1h": "1 час", "4h": "4 часа" };
-const TF_SHORT = { "1h": "1ч", "4h": "4ч" };
-const SNAPSHOT_AT = 1794821546;
-const BACKTEST = {
-  breakout: { n: 216, tp: 59, sl: 82, mid: 75 },
-  bounce: { n: 771, tp: 271, sl: 495, mid: 5 },
-  pullback: { n: 3378, tp: 1066, sl: 2029, mid: 283 },
-};
-const BACKTEST_NOTE = "Первое касание TP1 или SL; горизонт 3 суток на 1ч (72 свечи) и 7 суток на 4ч (42 свечи). Сигналы пересекаются по времени — это частота правила, не журнал независимых сделок. Выборка: 1000 свечей 1ч (~41 день) и 1000 свечей 4ч (~166 дней) по 13 монетам Bybit.";
-const SNAPSHOT_TICKER = [
-  { coin: "BTC", price: 64357.2, chg: -1.47 },
-  { coin: "ETH", price: 1798.96, chg: -1.23 },
-  { coin: "SOL", price: 70.78, chg: -1.23 },
-  { coin: "XRP", price: 0.9444, chg: -1.9 },
-  { coin: "DOGE", price: 0.05831, chg: -0.51 },
-  { coin: "BNB", price: 589, chg: -1.07 },
-  { coin: "LINK", price: 9.076, chg: -1.49 },
-  { coin: "AVAX", price: 7.114, chg: -1.51 },
-  { coin: "SUI", price: 0.717, chg: -1.06 },
-  { coin: "ADA", price: 0.1518, chg: -0.72 },
-  { coin: "YFI", price: 1699, chg: 0.65 },
-  { coin: "BIO", price: 0.01635, chg: -0.24 },
-  { coin: "ONDO", price: 0.3033, chg: -1.33 },
-];
+  <p class="disc">Не является финансовой рекомендацией. Сигналы рассчитываются автоматически по публичным рыночным данным и могут ошибаться. Сайт ничего не торгует, не просит ключи API и не видит твой аккаунт. Торговля фьючерсами с плечом — высокий риск потери депозита.</p>
+</div>
 
-function decimals(px) {
-  if (px >= 1000) return 1;
-  if (px >= 100) return 2;
-  if (px >= 10) return 3;
-  if (px >= 1) return 4;
-  if (px >= 0.1) return 5;
-  if (px >= 0.01) return 6;
-  return 7;
-}
-function rnd(px, d) {
-  const n = d == null ? decimals(px) : d;
-  const f = Math.pow(10, n);
-  return Math.round(px * f) / f;
-}
-function fmt(px, d) {
-  if (!isFinite(px)) return "—";
-  const n = d == null ? decimals(Math.abs(px)) : d;
-  return px.toLocaleString("ru-RU", { maximumFractionDigits: n, minimumFractionDigits: 0 });
-}
-function fmtYekat(unixSec) {
-  const s = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Asia/Yekaterinburg", day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  }).format(new Date(unixSec * 1000));
-  return s + " Екб (UTC+5)";
-}
-function fmtHm(unixSec) {
-  return new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Yekaterinburg", hour: "2-digit", minute: "2-digit" }).format(new Date(unixSec * 1000));
-}
-function fmtClock(ms) {
-  return new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Yekaterinburg", hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
-}
-function num(s) {
-  const v = parseFloat(String(s).replace(",", "."));
-  return isFinite(v) ? v : 0;
-}
-function mean(xs) { return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0; }
-function ema(vals, period) {
-  const out = new Array(vals.length).fill(0);
-  if (!vals.length) return out;
-  const k = 2 / (period + 1);
-  const n = Math.min(period, vals.length);
-  let seed = 0;
-  for (let i = 0; i < n; i++) seed += vals[i];
-  seed /= n;
-  out[n - 1] = seed;
-  for (let i = 0; i < n - 1; i++) {
-    let s = 0;
-    for (let j = 0; j <= i; j++) s += vals[j];
-    out[i] = s / (i + 1);
-  }
-  for (let i = n; i < vals.length; i++) out[i] = vals[i] * k + out[i - 1] * (1 - k);
-  return out;
-}
-function atrArr(cs, period) {
-  period = period || 14;
-  const trs = [];
-  for (let i = 0; i < cs.length; i++) {
-    if (i === 0) trs.push(cs[i].high - cs[i].low);
-    else {
-      const prev = cs[i - 1].close;
-      trs.push(Math.max(cs[i].high - cs[i].low, Math.abs(cs[i].high - prev), Math.abs(cs[i].low - prev)));
-    }
-  }
-  return ema(trs, period);
-}
-function liqWarn(side, entry, sl) {
-  const out = { "10": { liq: 0, before_stop: false }, "20": { liq: 0, before_stop: false } };
-  [10, 20].forEach((lev) => {
-    const liq = side === "long" ? entry * (1 - 1 / lev) : entry * (1 + 1 / lev);
-    const before = side === "long" ? sl < liq : sl > liq;
-    out[String(lev)] = { liq: rnd(liq), before_stop: before };
-  });
-  return out;
-}
-function snap(symbol, tf, typ, side, entry, sl, tp1, tp2, rr1, rr2, stopPct, price, barTs, entryLo, entryHi, level, ema20, ema50) {
-  return {
-    id: symbol + "-" + tf + "-" + typ + "-" + side + "-" + barTs,
-    coin: symbol.replace("USDT", ""), symbol, tf, type: typ, side, entry,
-    entry_lo: entryLo, entry_hi: entryHi, sl, tp1, tp2, level, rr1, rr2,
-    stop_pct: stopPct, price, bar_ts: barTs,
-    note: side === "short"
-      ? "Откат к EMA20 в нисходящем тренде (EMA20 ниже EMA50)"
-      : "Откат к EMA20 в восходящем тренде (EMA20 выше EMA50)",
-    liq: liqWarn(side, entry, sl), source: "bybit", ema20, ema50,
-  };
-}
-const SNAPSHOT_SIGNALS = [
-  snap("YFIUSDT","4h","pullback","short",1699,1761.9,1591,1510.3,1.72,3,3.7,1699,1794816000,1689.6,1708.4,1740.8,1740.8,1822),
-  snap("ADAUSDT","1h","pullback","short",0.1518,0.15528,0.1424,0.14136,2.7,3,2.29,0.1518,1794819600,0.15128,0.15232,0.15315,0.15315,0.15541),
-  snap("ONDOUSDT","1h","pullback","short",0.3033,0.31057,0.285,0.28149,2.52,3,2.4,0.3033,1794819600,0.30221,0.30439,0.30627,0.30627,0.31138),
-  snap("BNBUSDT","1h","pullback","short",589,598.45,565.52,560.65,2.48,3,1.6,589,1794819600,587.58,590.42,591.91,591.91,598.83),
-  snap("XRPUSDT","1h","pullback","short",0.9516,0.97638,0.8918,0.87727,2.41,3,2.6,0.9444,1794816000,0.94788,0.95532,0.95875,0.95875,0.96692),
-  snap("ETHUSDT","1h","pullback","short",1799,1837.3,1709.1,1684,2.35,3,2.13,1799,1794819600,1793.2,1804.7,1815.5,1815.5,1836.2),
-  snap("BTCUSDT","1h","pullback","short",64357.2,65435.7,61899.2,61121.6,2.28,3,1.68,64357.2,1794819600,64195.4,64519,64816.2,64816.2,65559.6),
-  snap("SUIUSDT","1h","pullback","short",0.717,0.73631,0.6741,0.65908,2.22,3,2.69,0.717,1794819600,0.7141,0.7199,0.7238,0.7238,0.73406),
-  snap("DOGEUSDT","1h","pullback","short",0.05831,0.059683,0.05536,0.054191,2.15,3,2.35,0.05831,1794819600,0.058104,0.058516,0.058853,0.058853,0.059753),
-  snap("LINKUSDT","1h","pullback","short",9.076,9.3156,8.567,8.3573,2.12,3,2.64,9.076,1794819600,9.0401,9.1119,9.1653,9.1653,9.2685),
-  snap("AVAXUSDT","1h","pullback","short",7.114,7.2983,6.725,6.561,2.11,3,2.59,7.114,1794819600,7.0863,7.1417,7.1942,7.1942,7.3765),
-  snap("SOLUSDT","1h","pullback","short",70.78,72.883,67.32,64.472,1.65,3,2.97,70.78,1794819600,70.465,71.095,71.517,71.517,72.707),
-  snap("BIOUSDT","1h","pullback","short",0.01627,0.016699,0.01566,0.014982,1.42,3,2.64,0.01635,1794816000,0.016206,0.016334,0.016407,0.016407,0.016806),
-];
+<nav class="tabbar glass">
+  <button data-tab="signals" class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>Сигналы</button>
+  <button data-tab="markets"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>Рынки</button>
+  <button data-tab="calc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M8 18h2M12 18h2M16 11v7"/></svg>Калькулятор</button>
+  <button data-tab="info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Справка</button>
+</nav>
 
-function pivots(cs, left, right) {
-  left = left == null ? 3 : left; right = right == null ? 3 : right;
-  const ph = [], pl = [];
-  for (let i = left; i < cs.length - right; i++) {
-    const h = cs[i].high, l = cs[i].low;
-    let isH = true, isL = true;
-    for (let j = i - left; j <= i + right; j++) {
-      if (j === i) continue;
-      if (cs[j].high > h) isH = false;
-      if (cs[j].low < l) isL = false;
-    }
-    if (isH) ph.push(i);
-    if (isL) pl.push(i);
-  }
-  return { ph, pl };
-}
-function buildSignal(coin, tf, typ, side, entry, sl, tp1, tp2, level, note, barTs, extra) {
-  if (entry <= 0 || sl <= 0) return null;
-  let r1 = 0, r2 = 0, risk = 0;
-  if (side === "long") {
-    if (!(sl < entry && entry < tp1 && tp1 <= tp2)) return null;
-    risk = entry - sl; r1 = (tp1 - entry) / risk; r2 = (tp2 - entry) / risk;
-  } else {
-    if (!(sl > entry && entry > tp1 && tp1 >= tp2)) return null;
-    risk = sl - entry; r1 = (entry - tp1) / risk; r2 = (entry - tp2) / risk;
-  }
-  if (risk / entry < 0.0025 || r1 < 1.2) return null;
-  const buf = risk * 0.15;
-  return Object.assign({
-    id: coin + "-" + tf + "-" + typ + "-" + side + "-" + barTs,
-    coin: coin.replace("USDT", ""), symbol: coin, tf, type: typ, side,
-    entry: rnd(entry), entry_lo: rnd(entry - buf), entry_hi: rnd(entry + buf),
-    sl: rnd(sl), tp1: rnd(tp1), tp2: rnd(tp2),
-    level: level == null ? null : rnd(level),
-    rr1: Math.round(r1 * 100) / 100, rr2: Math.round(r2 * 100) / 100,
-    stop_pct: Math.round((100 * risk) / entry * 100) / 100,
-    price: rnd(entry), bar_ts: barTs, note, liq: liqWarn(side, entry, sl), source: "bybit",
-  }, extra || {});
-}
-function detectBreakout(cs, coin, tf) {
-  const n = cs.length;
-  if (n < 40) return [];
-  const atrs = atrArr(cs);
-  const out = [];
-  for (let i = Math.max(30, n - 3); i < n; i++) {
-    const start = Math.max(0, i - 30), end = i - 1;
-    if (end - start < 15) continue;
-    const window = cs.slice(start, end);
-    const rangeHi = Math.max(...window.map((c) => c.high));
-    const rangeLo = Math.min(...window.map((c) => c.low));
-    const width = rangeHi - rangeLo, mid = (rangeHi + rangeLo) / 2;
-    if (mid <= 0) continue;
-    const widthPct = width / mid;
-    if (widthPct < 0.012 || widthPct > 0.18) continue;
-    const vavg = mean(cs.slice(Math.max(0, i - 20), i).map((c) => c.volume));
-    const volOk = vavg > 0 && cs[i].volume >= 1.35 * vavg;
-    const a = atrs[i] || width / 4, c = cs[i], prev = cs[i - 1];
-    if (c.close > rangeHi && prev.close <= rangeHi && volOk && c.close - rangeHi <= 1.4 * a) {
-      const half = window.slice(Math.floor(window.length / 2));
-      let sl = Math.min(Math.min(...half.map((x) => x.low)), rangeHi) - 0.2 * a;
-      const last8 = Math.min(...cs.slice(Math.max(start, i - 8), i + 1).map((x) => x.low));
-      if ((c.close - sl) / c.close > Math.max(0.08, widthPct * 0.9)) sl = last8 - 0.2 * a;
-      const sig = buildSignal(coin, tf, "breakout", "long", c.close, sl, c.close + width, c.close + width * 1.618, rangeHi, "Пробой верхней границы диапазона с повышенным объёмом", c.ts, { price: rnd(cs[n - 1].close) });
-      if (sig) out.push(sig);
-    }
-    if (c.close < rangeLo && prev.close >= rangeLo && volOk && rangeLo - c.close <= 1.4 * a) {
-      const half = window.slice(Math.floor(window.length / 2));
-      let sl = Math.max(Math.max(...half.map((x) => x.high)), rangeLo) + 0.2 * a;
-      const last8 = Math.max(...cs.slice(Math.max(start, i - 8), i + 1).map((x) => x.high));
-      if ((sl - c.close) / c.close > Math.max(0.08, widthPct * 0.9)) sl = last8 + 0.2 * a;
-      const sig = buildSignal(coin, tf, "breakout", "short", c.close, sl, c.close - width, c.close - width * 1.618, rangeLo, "Пробой нижней границы диапазона с повышенным объёмом", c.ts, { price: rnd(cs[n - 1].close) });
-      if (sig) out.push(sig);
-    }
-  }
-  return out;
-}
-function clusterLevels(cs, atrs, minTouches) {
-  minTouches = minTouches || 3;
-  const { ph, pl } = pivots(cs);
-  const pts = [];
-  ph.forEach((i) => pts.push({ idx: i, px: cs[i].high }));
-  pl.forEach((i) => pts.push({ idx: i, px: cs[i].low }));
-  pts.sort((a, b) => a.px - b.px);
-  const used = pts.map(() => false), levels = [];
-  for (let i = 0; i < pts.length; i++) {
-    if (used[i]) continue;
-    const a = atrs[pts[i].idx] || pts[i].px * 0.01;
-    const tol = Math.max(pts[i].px * 0.0025, 0.35 * a);
-    const group = [pts[i]];
-    used[i] = true;
-    for (let j = i + 1; j < pts.length; j++) {
-      if (used[j]) continue;
-      if (Math.abs(pts[j].px - pts[i].px) <= tol) { group.push(pts[j]); used[j] = true; }
-      else if (pts[j].px - pts[i].px > tol * 2) break;
-    }
-    if (group.length < minTouches) continue;
-    const prices = group.map((g) => g.px).sort((x, y) => x - y);
-    const lastI = Math.max(...group.map((g) => g.idx));
-    if (cs.length - 1 - lastI > 90) continue;
-    levels.push({ price: prices[Math.floor(prices.length / 2)], touches: group.length, last_i: lastI });
-  }
-  return levels;
-}
-function isLevelBroken(cs, levelPx, support, fromI, toI, atrV) {
-  const buf = 0.25 * atrV;
-  let streak = 0;
-  for (let i = fromI; i <= toI; i++) {
-    const brk = support ? cs[i].close < levelPx - buf : cs[i].close > levelPx + buf;
-    streak = brk ? streak + 1 : 0;
-    if (streak >= 2) return true;
-  }
-  return false;
-}
-function detectBounce(cs, coin, tf) {
-  const n = cs.length;
-  if (n < 80) return [];
-  const atrs = atrArr(cs);
-  const levels = clusterLevels(cs.slice(0, -1), atrs.slice(0, -1));
-  const out = [];
-  for (let i = Math.max(80, n - 3); i < n; i++) {
-    const a = atrs[i], c = cs[i];
-    for (const lv of levels) {
-      const px = lv.price;
-      const near = Math.abs(c.close - px) <= 0.45 * a || Math.abs(c.low - px) <= 0.45 * a || Math.abs(c.high - px) <= 0.45 * a || (c.low <= px && px <= c.high);
-      if (!near) continue;
-      const rng = c.high - c.low;
-      if (rng <= 0) continue;
-      const lowerWick = Math.min(c.open, c.close) - c.low;
-      const upperWick = c.high - Math.max(c.open, c.close);
-      if (c.low <= px + 0.15 * a && lowerWick >= 0.4 * rng && c.close >= px && c.close > c.open * 0.999) {
-        if (isLevelBroken(cs, px, true, lv.last_i, i - 1, a)) continue;
-        if ((c.close - c.low) / rng < 0.5) continue;
-        const entry = c.close, sl = Math.min(c.low, px) - 0.2 * a;
-        const resists = levels.map((L) => L.price).filter((p) => p > entry + 0.8 * a).sort((x, y) => x - y);
-        const risk = entry - sl;
-        let tp1 = resists[0] ?? entry + 1.8 * risk;
-        if ((tp1 - entry) / risk < 1.3) tp1 = entry + 1.8 * risk;
-        let tp2 = resists[1] ?? entry + 3 * risk;
-        if ((tp2 - entry) / risk < 2.2 || tp2 < tp1) tp2 = entry + 3 * risk;
-        const sig = buildSignal(coin, tf, "bounce", "long", entry, sl, tp1, tp2, px, "Отскок от поддержки (уровень тестировался " + lv.touches + " раз)", c.ts, { price: rnd(cs[n - 1].close) });
-        if (sig) out.push(sig);
-      }
-      if (c.high >= px - 0.15 * a && upperWick >= 0.4 * rng && c.close <= px && c.close < c.open * 1.001) {
-        if (isLevelBroken(cs, px, false, lv.last_i, i - 1, a)) continue;
-        if ((c.high - c.close) / rng < 0.5) continue;
-        const entry = c.close, sl = Math.max(c.high, px) + 0.2 * a;
-        const supports = levels.map((L) => L.price).filter((p) => p < entry - 0.8 * a).sort((x, y) => y - x);
-        const risk = sl - entry;
-        let tp1 = supports[0] ?? entry - 1.8 * risk;
-        if ((entry - tp1) / risk < 1.3) tp1 = entry - 1.8 * risk;
-        let tp2 = supports[1] ?? entry - 3 * risk;
-        if ((entry - tp2) / risk < 2.2 || tp2 > tp1) tp2 = entry - 3 * risk;
-        const sig = buildSignal(coin, tf, "bounce", "short", entry, sl, tp1, tp2, px, "Отскок от сопротивления (уровень тестировался " + lv.touches + " раз)", c.ts, { price: rnd(cs[n - 1].close) });
-        if (sig) out.push(sig);
-      }
-    }
-  }
-  return out;
-}
-function detectPullback(cs, coin, tf) {
-  const n = cs.length;
-  if (n < 60) return [];
-  const closes = cs.map((c) => c.close);
-  const e20 = ema(closes, 20), e50 = ema(closes, 50), atrs = atrArr(cs), out = [];
-  for (let i = Math.max(60, n - 3); i < n; i++) {
-    const a = atrs[i], c = cs[i], ema20 = e20[i], ema50 = e50[i], slope50 = ema50 - e50[i - 8];
-    if (ema20 > ema50 && c.close > ema50 && slope50 > 0) {
-      let ext = false;
-      for (let j = i - 16; j < i - 1; j++) if (cs[j].close > e20[j] + 0.3 * atrs[j]) ext = true;
-      if (!ext) continue;
-      let touched = false, pbLow = c.low;
-      for (let j = i - 8; j <= i; j++) {
-        if (cs[j].low <= e20[j] + 0.15 * atrs[j]) { touched = true; pbLow = Math.min(pbLow, cs[j].low); }
-      }
-      if (!touched || c.close < ema20 || c.close > ema20 + 1.15 * a) continue;
-      const rng = c.high - c.low + 1e-12;
-      if (c.close < c.open && c.close - c.low < 0.4 * rng) continue;
-      const risk = c.close - (pbLow - 0.2 * a);
-      const swingHi = Math.max(...cs.slice(Math.max(0, i - 40), i).map((x) => x.high));
-      const tp1 = swingHi > c.close + 1.3 * risk ? swingHi : c.close + 1.8 * risk;
-      let tp2 = c.close + 3 * risk;
-      if (tp2 <= tp1) tp2 = c.close + Math.max(3 * risk, (tp1 - c.close) * 1.5);
-      const sig = buildSignal(coin, tf, "pullback", "long", c.close, pbLow - 0.2 * a, tp1, tp2, ema20, "Откат к EMA20 в восходящем тренде (EMA20 выше EMA50)", c.ts, { ema20: rnd(ema20), ema50: rnd(ema50), price: rnd(cs[n - 1].close) });
-      if (sig) out.push(sig);
-    }
-    if (ema20 < ema50 && c.close < ema50 && slope50 < 0) {
-      let ext = false;
-      for (let j = i - 16; j < i - 1; j++) if (cs[j].close < e20[j] - 0.3 * atrs[j]) ext = true;
-      if (!ext) continue;
-      let touched = false, pbHigh = c.high;
-      for (let j = i - 8; j <= i; j++) {
-        if (cs[j].high >= e20[j] - 0.15 * atrs[j]) { touched = true; pbHigh = Math.max(pbHigh, cs[j].high); }
-      }
-      if (!touched || c.close > ema20 || c.close < ema20 - 1.15 * a) continue;
-      const rng = c.high - c.low + 1e-12;
-      if (c.close > c.open && c.high - c.close < 0.4 * rng) continue;
-      const risk = pbHigh + 0.2 * a - c.close;
-      const swingLo = Math.min(...cs.slice(Math.max(0, i - 40), i).map((x) => x.low));
-      const tp1 = swingLo < c.close - 1.3 * risk ? swingLo : c.close - 1.8 * risk;
-      let tp2 = c.close - 3 * risk;
-      if (tp2 >= tp1) tp2 = c.close - Math.max(3 * risk, (c.close - tp1) * 1.5);
-      const sig = buildSignal(coin, tf, "pullback", "short", c.close, pbHigh + 0.2 * a, tp1, tp2, ema20, "Откат к EMA20 в нисходящем тренде (EMA20 ниже EMA50)", c.ts, { ema20: rnd(ema20), ema50: rnd(ema50), price: rnd(cs[n - 1].close) });
-      if (sig) out.push(sig);
-    }
-  }
-  return out;
-}
-function dedupe(sigs) {
-  const best = new Map();
-  sigs.forEach((s) => {
-    const k = s.symbol + "|" + s.tf + "|" + s.type + "|" + s.side;
-    const prev = best.get(k);
-    if (!prev || s.bar_ts > prev.bar_ts || (s.bar_ts === prev.bar_ts && s.rr1 > prev.rr1)) best.set(k, s);
-  });
-  return Array.from(best.values());
-}
-function detectAll(book) {
-  const all = [];
-  Object.keys(book).forEach((sym) => {
-    ["1h", "4h"].forEach((tf) => {
-      const cs = book[sym][tf];
-      if (!cs || cs.length < 40) return;
-      all.push(...dedupe([...detectBreakout(cs, sym, tf), ...detectBounce(cs, sym, tf), ...detectPullback(cs, sym, tf)]));
-    });
-  });
-  all.sort((a, b) => (a.tf === b.tf ? b.rr1 - a.rr1 : a.tf === "4h" ? -1 : 1));
-  return all;
-}
-async function fetchJson(url) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 12000);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return await res.json();
-  } finally { clearTimeout(t); }
-}
-function parseBybit(data) {
-  if (data.retCode !== 0 || !data.result || !data.result.list) throw new Error("bybit");
-  return data.result.list.map((row) => {
-    const ts = Number(row[0]);
-    return { ts: ts > 1e12 ? Math.floor(ts / 1000) : ts, open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]) };
-  }).sort((a, b) => a.ts - b.ts);
-}
-function parseOkx(data) {
-  if (data.code !== "0" || !data.data) throw new Error("okx");
-  return data.data.map((row) => {
-    const ts = Number(row[0]);
-    return { ts: ts > 1e12 ? Math.floor(ts / 1000) : ts, open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]) };
-  }).sort((a, b) => a.ts - b.ts);
-}
-function parseGate(data) {
-  if (!Array.isArray(data) || !data.length) throw new Error("gate");
-  return data.map((row) => ({ ts: Number(row.t), open: Number(row.o), high: Number(row.h), low: Number(row.l), close: Number(row.c), volume: Number(row.v || 0) })).sort((a, b) => a.ts - b.ts);
-}
-async function fetchAllLive() {
-  const book = {};
-  const bybitRows = await Promise.allSettled(SYMBOLS.map(async (sym) => {
-    const [h1, h4] = await Promise.all([
-      fetchJson("https://api.bybit.com/v5/market/kline?category=linear&symbol=" + sym + "&interval=60&limit=200").then(parseBybit),
-      fetchJson("https://api.bybit.com/v5/market/kline?category=linear&symbol=" + sym + "&interval=240&limit=200").then(parseBybit),
-    ]);
-    return [sym, { "1h": h1, "4h": h4 }];
-  }));
-  for (const r of bybitRows) if (r.status === "fulfilled") book[r.value[0]] = r.value[1];
-  if (Object.keys(book).length >= 8) return { book, source: "Bybit" };
-  const okxRows = await Promise.allSettled(SYMBOLS.map(async (sym) => {
-    const inst = sym.replace("USDT", "") + "-USDT-SWAP";
-    const [h1, h4] = await Promise.all([
-      fetchJson("https://www.okx.com/api/v5/market/candles?instId=" + inst + "&bar=1H&limit=200").then(parseOkx),
-      fetchJson("https://www.okx.com/api/v5/market/candles?instId=" + inst + "&bar=4H&limit=200").then(parseOkx),
-    ]);
-    return [sym, { "1h": h1, "4h": h4 }];
-  }));
-  const nextOkx = {};
-  for (const r of okxRows) if (r.status === "fulfilled") nextOkx[r.value[0]] = r.value[1];
-  if (Object.keys(nextOkx).length >= 8) return { book: nextOkx, source: "OKX" };
-  const next = {};
-  await Promise.all(SYMBOLS.map(async (sym) => {
-    const contract = sym.replace("USDT", "") + "_USDT";
-    const [h1, h4] = await Promise.all([
-      fetchJson("https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=" + contract + "&interval=1h&limit=200").then(parseGate),
-      fetchJson("https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=" + contract + "&interval=4h&limit=200").then(parseGate),
-    ]);
-    next[sym] = { "1h": h1, "4h": h4 };
-  }));
-  return { book: next, source: "Gate" };
-}
-function ticksFromBook(book) {
-  if (!book || !Object.keys(book).length) return SNAPSHOT_TICKER;
-  return SYMBOLS.map((sym) => {
-    const coin = sym.replace("USDT", "");
-    const cs = book[sym] && book[sym]["1h"];
-    const fallback = SNAPSHOT_TICKER.find((t) => t.coin === coin);
-    if (!cs || cs.length < 2) return fallback || { coin, price: 0, chg: 0 };
-    const last = cs[cs.length - 1].close;
-    const prev = cs.length >= 25 ? cs[cs.length - 25].close : cs[0].close;
-    return { coin, price: last, chg: prev ? ((last - prev) / prev) * 100 : 0 };
-  });
-}
-function bestOf(signals, typ) {
-  const list = signals.filter((s) => s.type === typ);
-  if (!list.length) return null;
-  return list.slice().sort((a, b) => (a.tf === b.tf ? b.rr1 - a.rr1 : a.tf === "4h" ? -1 : 1))[0];
-}
-function sigLine(s) {
-  return SIDE_LABEL[s.side].toLowerCase() + " " + s.coin + " " + TF_SHORT[s.tf] + " · вход " + fmt(s.entry) + " · стоп " + fmt(s.sl) + " · RR " + fmt(s.rr1, 1);
-}
-function activityLine(s) { return TYPE_SHORT[s.type] + " нашёл " + sigLine(s); }
-function pct(v, n) { return n ? fmt((100 * v) / n, 1) + "%" : "—"; }
-function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
+<div class="modal" id="modal"><div class="sheet glass">
+  <div class="hd"><div id="mIc"></div><div><h2 id="mTitle">—</h2><div class="mut" style="font-size:13px" id="mSub"></div></div><button class="iconbtn close" id="mClose">✕</button></div>
+  <div class="seg tfsw" id="mTf" style="max-width:260px"><button data-v="15m">15м</button><button data-v="1h">1ч</button><button data-v="4h">4ч</button></div>
+  <div id="chart"></div>
+  <div class="kv" id="mKv"></div>
+  <div class="reason" id="mReason" style="font-size:14px;margin-top:10px"></div>
+  <div class="links"><a href="#" id="mCalc">▦ В калькулятор</a><a href="#" id="mBybit" target="_blank" rel="noopener">Открыть на Bybit ↗</a><a href="#" id="mTv" target="_blank" rel="noopener">TradingView ↗</a></div>
+</div></div>
 
-function tg() { return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null; }
-function buzz(kind) {
-  try { const h = tg() && tg().HapticFeedback; if (h) h.impactOccurred(kind || "light"); } catch (e) {}
-}
-function applyTelegram() {
-  const w = tg();
-  if (!w) return;
-  try { w.ready(); } catch (e) {}
-  try { w.expand(); } catch (e) {}
-  try { if (w.setHeaderColor) w.setHeaderColor("secondary_bg_color"); } catch (e) {}
-  try {
-    const bg = (w.themeParams && w.themeParams.bg_color) || "#0b0d12";
-    if (w.setBackgroundColor) w.setBackgroundColor(bg);
-  } catch (e) {}
-  document.documentElement.dataset.tg = w.colorScheme || "dark";
-}
-
-function miniChart(candles, signal) {
-  const w = 520, h = 168, padL = 6, padR = 62, padT = 10, padB = 8;
-  const vis = (candles || []).slice(-64);
-  if (vis.length < 8) return '<p>График появится после обновления свечей.</p>';
-  const closes = vis.map((c) => c.close);
-  const e20 = ema(closes, 20), e50 = ema(closes, 50);
-  const lineVals = [signal.entry, signal.sl, signal.tp1, signal.tp2];
-  if (signal.level) lineVals.push(signal.level);
-  const lo = Math.min(...vis.map((c) => c.low), ...lineVals);
-  const hi = Math.max(...vis.map((c) => c.high), ...lineVals);
-  const span = hi - lo || 1, innerW = w - padL - padR, innerH = h - padT - padB;
-  const x = (i) => padL + (i + 0.5) * (innerW / vis.length);
-  const y = (p) => padT + ((hi - p) / span) * innerH;
-  const cw = Math.max(2, innerW / vis.length - 1.2);
-  const up = "var(--success)", down = "var(--danger)", grid = "var(--line)";
-  const path = (arr) => arr.map((v, i) => (i === 0 ? "M" : "L") + x(i) + " " + y(v)).join(" ");
-  const lines = [
-    { yv: signal.entry, color: "var(--accent)", label: "вход" },
-    { yv: signal.sl, color: down, label: "стоп" },
-    { yv: signal.tp1, color: up, label: "тейк 1" },
-    { yv: signal.tp2, color: up, label: "тейк 2" },
-  ];
-  if (signal.level) lines.push({ yv: signal.level, color: "var(--muted)", label: "уровень", dash: true });
-  let svg = '<svg class="chart" viewBox="0 0 ' + w + " " + h + '" width="100%">';
-  svg += '<line x1="'+padL+'" y1="'+padT+'" x2="'+padL+'" y2="'+(h-padB)+'" stroke="'+grid+'" />';
-  svg += '<line x1="'+padL+'" y1="'+(h-padB)+'" x2="'+(w-padR)+'" y2="'+(h-padB)+'" stroke="'+grid+'" />';
-  lines.forEach((ln) => {
-    svg += '<g><line x1="'+padL+'" y1="'+y(ln.yv)+'" x2="'+(w-padR)+'" y2="'+y(ln.yv)+'" stroke="'+ln.color+'" stroke-width="1"'+(ln.dash?' stroke-dasharray="4 3"':'')+' />';
-    svg += '<text x="'+(w-padR+4)+'" y="'+(y(ln.yv)+3)+'" fill="'+ln.color+'" font-size="9" font-family="system-ui">'+ln.label+" "+fmt(ln.yv)+"</text></g>";
-  });
-  svg += '<path d="'+path(e50)+'" fill="none" stroke="var(--warning)" stroke-width="1" />';
-  svg += '<path d="'+path(e20)+'" fill="none" stroke="var(--accent)" stroke-width="1.2" />';
-  vis.forEach((c, i) => {
-    const color = c.close >= c.open ? up : down;
-    svg += '<g><line x1="'+x(i)+'" y1="'+y(c.high)+'" x2="'+x(i)+'" y2="'+y(c.low)+'" stroke="'+color+'" stroke-width="1" />';
-    svg += '<rect x="'+(x(i)-cw/2)+'" y="'+y(Math.max(c.open,c.close))+'" width="'+cw+'" height="'+Math.max(1, Math.abs(y(c.open)-y(c.close)))+'" fill="'+color+'" /></g>';
-  });
-  svg += "</svg>";
-  return svg;
-}
-function iconSvg(kind) {
-  const paths = {
-    breakout: '<path d="M2.5 12.5 L6.5 7.5 L9.5 9.5 L13.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>',
-    bounce: '<path d="M2.5 11.5 C5.5 11.5 5.5 4.5 8 4.5 C10.5 4.5 10.5 11.5 13.5 11.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>',
-    pullback: '<path d="M2.5 11.5 L6 6.5 L9 8.5 L11 6 L13.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>',
-    risk: '<path d="M8 2.5 L14 13.5 H2 Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>',
-  };
-  return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">'+paths[kind]+"</svg>";
-}
-
-const state = {
-  tab: "home",
-  tf: "all",
-  typ: "all",
-  side: "all",
-  book: {},
-  signals: SNAPSHOT_SIGNALS.slice(),
-  dataSource: "снимок Bybit",
-  updatedAt: SNAPSHOT_AT,
-  fresh: false,
-  loading: false,
-  error: "",
-  selectedId: SNAPSHOT_SIGNALS[0] ? SNAPSHOT_SIGNALS[0].id : "",
-  equity: "90",
-  riskPct: "1",
-  lev: "10",
-  flip: false,
-  toastOn: true,
-  toasts: SNAPSHOT_SIGNALS.slice().sort((a, b) => b.rr1 - a.rr1).slice(0, 2),
-  shown: 0,
-};
-
-function countsOf(signals) {
-  return {
-    n: signals.length,
-    longN: signals.filter((s) => s.side === "long").length,
-    shortN: signals.filter((s) => s.side === "short").length,
-    h1: signals.filter((s) => s.tf === "1h").length,
-    h4: signals.filter((s) => s.tf === "4h").length,
-  };
-}
-function filteredSignals() {
-  return state.signals.filter((s) =>
-    (state.tf === "all" || s.tf === state.tf) &&
-    (state.typ === "all" || s.type === state.typ) &&
-    (state.side === "all" || s.side === state.side)
-  );
-}
-function selectedSig() {
-  const f = filteredSignals();
-  return f.find((s) => s.id === state.selectedId) || f[0] || state.signals[0] || null;
-}
-function topSig() {
-  if (!state.signals.length) return null;
-  return state.signals.slice().sort((a, b) => (a.tf === b.tf ? b.rr1 - a.rr1 : a.tf === "4h" ? -1 : 1))[0];
-}
-function calcFor(sel) {
-  if (!sel) return null;
-  const dep = num(state.equity), L = Math.max(num(state.lev), 1);
-  const riskUsd = (dep * num(state.riskPct)) / 100;
-  const dist = Math.abs(sel.entry - sel.sl);
-  const qty = dist > 0 ? riskUsd / dist : 0;
-  const notional = qty * sel.entry, margin = notional / L;
-  const liq = sel.side === "long" ? sel.entry * (1 - 1 / L) : sel.entry * (1 + 1 / L);
-  const liqBefore = sel.side === "long" ? sel.sl < liq : sel.sl > liq;
-  return { riskUsd, qty, notional, margin, liq, liqBefore, L, dep };
-}
-
-async function refresh() {
-  state.loading = true; state.error = "";
-  renderChrome(); renderPage();
-  try {
-    const { book, source } = await fetchAllLive();
-    const sigs = detectAll(book);
-    sigs.forEach((s) => {
-      const last = book[s.symbol] && book[s.symbol][s.tf];
-      if (last && last.length) s.price = rnd(last[last.length - 1].close);
-    });
-    state.book = book;
-    state.signals = sigs;
-    state.dataSource = source;
-    state.updatedAt = Math.floor(Date.now() / 1000);
-    state.fresh = true;
-    if (sigs.length && !sigs.some((s) => s.id === state.selectedId)) state.selectedId = sigs[0].id;
-    state.toasts = sigs.slice().sort((a, b) => b.rr1 - a.rr1).slice(0, 2);
-    state.toastOn = state.toasts.length > 0;
-    if (state.toastOn) scheduleToastHide();
-    startCountUp(sigs.length);
-  } catch (e) {
-    state.error = "Живые свечи не загрузились, на странице остаётся снимок Bybit. " + (e && e.message ? e.message : "");
-  } finally {
-    state.loading = false;
-    renderAll();
-  }
-}
-
-let toastTimer = null;
-function scheduleToastHide() {
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { state.toastOn = false; renderToasts(); }, 6500);
-}
-
-let countRaf = 0;
-function startCountUp(target) {
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce) { state.shown = target; const el = document.getElementById("heroNum"); if (el) el.textContent = String(target); return; }
-  if (countRaf) cancelAnimationFrame(countRaf);
-  const duration = 1100;
-  let start = null;
-  const step = (t) => {
-    if (start == null) start = t;
-    const p = Math.min(1, (t - start) / duration);
-    const e = 1 - Math.pow(1 - p, 3);
-    state.shown = Math.round(e * target);
-    const el = document.getElementById("heroNum");
-    if (el) el.textContent = String(state.shown);
-    if (p < 1) countRaf = requestAnimationFrame(step);
-  };
-  state.shown = 0;
-  countRaf = requestAnimationFrame(step);
-}
-
-function renderChrome() {
-  const live = document.getElementById("liveLabel");
-  const dot = document.getElementById("liveDot");
-  live.textContent = state.loading ? "Обновляю" : (state.fresh ? "Live" : "Снимок");
-  dot.className = "dot" + ((state.fresh || state.loading) ? " on" : "");
-  live.style.color = (state.fresh || state.loading) ? "var(--success)" : "";
-  renderTicker();
-  renderToasts();
-  renderTabs();
-}
-function renderTicker() {
-  const ticks = ticksFromBook(state.book);
-  const row = ticks.map((t) => {
-    const up = t.chg >= 0;
-    return '<div class="tick"><b>$' + esc(t.coin) + '</b><span class="px">' + fmt(t.price) + '</span><span class="' + (up ? "up" : "down") + '">' + (up ? "+" : "") + fmt(t.chg, 2) + "%</span></div>";
-  }).join("");
-  document.getElementById("ticker").innerHTML = '<div class="ticker-track"><div class="ticker-row">' + row + '</div><div class="ticker-row">' + row + "</div></div>";
-}
-function renderToasts() {
-  const box = document.getElementById("toasts");
-  if (!state.toastOn || !state.toasts.length) { box.innerHTML = ""; return; }
-  box.innerHTML = state.toasts.map((s) =>
-    '<div class="toast ' + s.side + '"><div><div class="k">Сейчас на доске</div><div class="t">' +
-    esc(TYPE_SHORT[s.type]) + ": " + esc(SIDE_LABEL[s.side].toLowerCase() + " " + s.coin + " " + TF_SHORT[s.tf]) +
-    '</div><div class="d">вход ' + fmt(s.entry) + " · стоп " + fmt(s.sl) + " · RR " + fmt(s.rr1, 2) +
-    '</div></div><button class="x" type="button" aria-label="Закрыть">×</button></div>'
-  ).join("");
-  box.querySelectorAll(".x").forEach((b) => b.addEventListener("click", () => { buzz("light"); state.toastOn = false; renderToasts(); }));
-}
-function renderTabs() {
-  const counts = countsOf(state.signals);
-  const tabs = [
-    { id: "home", label: "Обзор" },
-    { id: "signals", label: "Сигналы " + counts.n },
-    { id: "calc", label: "Расчёт" },
-    { id: "info", label: "Справка" },
-  ];
-  document.getElementById("tabs").innerHTML = tabs.map((t) =>
-    '<button type="button" class="' + (state.tab === t.id ? "on" : "") + '" data-tab="' + t.id + '">' + esc(t.label) + "</button>"
-  ).join("");
-  document.getElementById("tabs").onclick = (e) => {
-    const b = e.target.closest("button");
-    if (!b) return;
-    buzz("light");
-    state.tab = b.getAttribute("data-tab");
-    renderAll();
-  };
-}
-
-function signalCardHtml(s, selected) {
-  const candles = (state.book[s.symbol] && state.book[s.symbol][s.tf]) || [];
-  const liq10 = s.liq["10"], liq20 = s.liq["20"];
-  const liqBad = (liq10 && liq10.before_stop) || (liq20 && liq20.before_stop);
-  let html = '<article class="sig">';
-  html += '<div class="sig-head"><b>' + esc(s.coin) + (USER_COINS.has(s.coin) ? " · ваша монета" : "") + '</b><div class="sig-time">свеча ' + esc(fmtYekat(s.bar_ts)) + "</div></div>";
-  html += '<div style="margin:8px 0 10px">';
-  html += '<span class="pill ' + (s.side === "long" ? "ok" : "bad") + '">' + SIDE_LABEL[s.side] + "</span>";
-  html += '<span class="pill acc">' + TYPE_LABEL[s.type] + "</span>";
-  html += '<span class="pill">' + TF_LABEL[s.tf] + "</span>";
-  html += '<span class="pill ' + (s.rr1 >= 2 ? "ok" : "") + '">RR ' + fmt(s.rr1, 2) + "</span></div>";
-  html += "<p>" + esc(s.note) + "</p>";
-  html += miniChart(candles, s);
-  html += '<div class="props">';
-  html += '<div><div class="k">Цена сейчас</div><div>' + fmt(s.price) + "</div></div>";
-  html += '<div><div class="k">Зона входа</div><div>' + fmt(s.entry_lo) + " — " + fmt(s.entry_hi) + "</div></div>";
-  html += '<div><div class="k">Стоп</div><div>' + fmt(s.sl) + "  (−" + fmt(s.stop_pct, 2) + "%)</div></div>";
-  html += '<div><div class="k">Тейк 1</div><div>' + fmt(s.tp1) + "  (RR " + fmt(s.rr1, 2) + ")</div></div>";
-  html += '<div><div class="k">Тейк 2</div><div>' + fmt(s.tp2) + "  (RR " + fmt(s.rr2, 2) + ")</div></div></div>";
-  if (liqBad) {
-    html += '<div class="callout danger"><b>Ликвидация ближе стопа</b>При ' + (liq10 && liq10.before_stop ? "10x " : "") + (liq20 && liq20.before_stop ? "20x " : "") + "примерная ликвидация (1/плечо) наступит раньше структурного стопа. Снизьте плечо или не ставьте этот стоп на кроссе.</div>";
-  } else {
-    html += "<p>Ликвидация при 10x ≈ " + fmt(liq10.liq) + " и при 20x ≈ " + fmt(liq20.liq) + " — дальше стопа " + fmt(s.sl) + ".</p>";
-  }
-  html += '<button class="btn ' + (selected ? "" : "quiet") + ' block" type="button" data-pick="' + esc(s.id) + '">' + (selected ? "Выбрано для калькулятора" : "Подставить в калькулятор") + "</button></article>";
-  return html;
-}
-
-function renderHome() {
-  const c = countsOf(state.signals);
-  const bias = c.n === 0 ? "Свежих сетапов нет"
-    : (c.shortN > c.longN * 2 && c.shortN >= 5) ? ("Перевес шортов · " + c.longN + " лонг / " + c.shortN + " шорт")
-    : (c.longN > c.shortN * 2 && c.longN >= 5) ? ("Перевес лонгов · " + c.longN + " лонг / " + c.shortN + " шорт")
-    : ("Смешанный рынок · " + c.longN + " лонг / " + c.shortN + " шорт");
-  const top = topSig();
-  const longShare = c.n ? (100 * c.longN) / c.n : 0;
-  const sel = selectedSig();
-  let riskFound = "Выберите сигнал, чтобы посчитать объём";
-  if (sel) {
-    const bad = sel.liq["10"].before_stop || sel.liq["20"].before_stop;
-    riskFound = bad
-      ? ("Ликвидация ближе стопа · " + sel.coin + " " + SIDE_LABEL[sel.side].toLowerCase())
-      : (sel.coin + " · стоп −" + fmt(sel.stop_pct, 2) + "% · ликв. дальше стопа");
-  }
-  function found(k) {
-    const s = bestOf(state.signals, k);
-    return s ? (TYPE_SHORT[k] + " — " + sigLine(s)) : (TYPE_SHORT[k] + " — сейчас нет сигнала");
-  }
-  function bt(k) {
-    const b = BACKTEST[k];
-    return "Т " + b.tp + " · С " + b.sl + " · n=" + b.n + " · тейк " + pct(b.tp, b.n) + " · история, не живой счёт";
-  }
-  const scanN = "Сканирую " + SYMBOLS.length + " пар";
-  const agents = [
-    { key: "breakout", name: "Пробой", sub: "пробой уровня", kind: "breakout", wash: "var(--accent-dim)", color: "var(--accent)", scan: scanN, found: found("breakout"), stats: bt("breakout") },
-    { key: "bounce", name: "Отскок", sub: "от поддержки/сопротивления", kind: "bounce", wash: "var(--warning-dim)", color: "var(--warning)", scan: scanN, found: found("bounce"), stats: bt("bounce") },
-    { key: "pullback", name: "Откат", sub: "вход по тренду", kind: "pullback", wash: "var(--success-dim)", color: "var(--success)", scan: scanN, found: found("pullback"), stats: bt("pullback") },
-    { key: "risk", name: "Риск", sub: "калькулятор / ликвидация", kind: "risk", wash: "var(--fill-strong)", color: "var(--accent)", scan: "Готов посчитать объём", found: riskFound, stats: "депозит $" + fmt(num(state.equity), 0) + " · риск " + fmt(num(state.riskPct), 1) + "% · плечо " + fmt(num(state.lev), 0) + "x" },
-  ];
-  let html = '<div class="hero">';
-  html += '<div class="hero-top"><div>Активных сигналов' + (state.fresh ? " · живые свечи" : " · снимок, пока не обновилось") + '</div><span class="pill ' + (state.fresh ? "ok" : "") + '">' + esc(state.dataSource) + "</span></div>";
-  html += '<div class="hero-num" id="heroNum">' + state.shown + "</div>";
-  html += '<div class="hero-bias">' + esc(bias) + "</div>";
-  if (top) html += '<div class="hero-top-sig">Топ: ' + esc(TYPE_SHORT[top.type].toLowerCase() + " · " + sigLine(top)) + "</div>";
-  html += '<div class="bar"><span style="width:' + longShare + '%"></span></div>';
-  html += '<div class="bar-labels"><span>лонг ' + c.longN + "</span><span>" + c.h1 + " на 1ч · " + c.h4 + " на 4ч</span><span>шорт " + c.shortN + "</span></div>";
-  html += '<div class="note">Обновлено ' + esc(fmtYekat(state.updatedAt)) + ". Правила, не совет. Ордера не отправляются.</div></div>";
-  if (c.shortN >= 8 && c.longN === 0) html += '<div class="callout"><b>Один рынок, много одинаковых шортов</b>Почти все идеи — откат в нисходящем тренде. Альты обычно ходят за BTC: несколько шортов сразу — это одна ставка, а не набор независимых сделок.</div>';
-  if (state.error) html += '<div class="callout"><b>Обновление не удалось</b>' + esc(state.error) + "</div>";
-  html += '<div class="grid2">';
-  agents.forEach((a) => {
-    html += '<button type="button" class="agent" data-agent="' + a.key + '"><div class="agent-top"><div class="icon" style="background:' + a.wash + ";color:" + a.color + '">' + iconSvg(a.kind) + '</div><div><div class="agent-name">' + a.name + '</div><div class="agent-sub">' + a.sub + "</div></div></div>";
-    html += '<div class="agent-status">' + esc(state.flip ? a.found : a.scan) + '</div><div class="agent-stats">' + esc(a.stats) + "</div></button>";
-  });
-  html += "</div>";
-  const activity = state.signals.slice().sort((a, b) => b.bar_ts - a.bar_ts || b.rr1 - a.rr1);
-  html += '<div class="feed"><div class="feed-head"><b>Активность</b><span>время свечи, Екб (UTC+5)</span></div>';
-  if (!activity.length) html += "<p>Пока нет строк — обновите свечи.</p>";
-  activity.forEach((s) => {
-    html += '<button type="button" class="row" data-open="' + esc(s.id) + '"><span class="row-dot" style="background:' + (s.side === "long" ? "var(--success)" : "var(--danger)") + '"></span><span class="row-time">' + esc(fmtHm(s.bar_ts)) + '</span><span class="row-text">' + esc(activityLine(s)) + "</span></button>";
-  });
-  html += "</div>";
-  html += '<button class="btn block" type="button" id="refreshBtn"' + (state.loading ? " disabled" : "") + ">" + (state.loading ? "Обновляю…" : "Обновить свечи") + "</button>";
-  return html;
-}
-
-function renderSignals() {
-  const c = countsOf(state.signals);
-  const f = filteredSignals();
-  const sel = selectedSig();
-  let html = '<section class="section"><h2>Данные и фильтры</h2>';
-  html += '<div class="props"><div><div class="k">Источник</div><div>' + esc(state.dataSource + (state.fresh ? " (живые свечи из браузера)" : " (снимок, пока не обновилось)")) + "</div></div>";
-  html += '<div><div class="k">Обновлено</div><div>' + esc(fmtYekat(state.updatedAt)) + "</div></div>";
-  html += '<div><div class="k">Статус</div><div>' + (state.loading ? "загрузка" : state.error ? "снимок + ошибка обновления" : "готово") + "</div></div></div>";
-  if (state.error) html += '<div class="callout"><b>Обновление не удалось</b>' + esc(state.error) + "</div>";
-  html += "<p>Сначала страница запрашивает публичные свечи Bybit (category=linear) из вашего браузера. Если Bybit недоступен — пробует OKX, затем Gate. Пока запрос идёт, показан снимок, снятый " + esc(fmtYekat(SNAPSHOT_AT)) + ". TONUSDT в линейных USDT-перпетуалах Bybit сейчас нет, в список не входит.</p>";
-  html += '<div class="filters">';
-  html += '<div class="seg">';
-  [["all","Оба ТФ",c.n],["1h","1 час",c.h1],["4h","4 часа",c.h4]].forEach((x) => {
-    html += '<button type="button" class="' + (state.tf === x[0] ? "on" : "") + '" data-tf="' + x[0] + '">' + x[1] + " " + x[2] + "</button>";
-  });
-  html += "</div>";
-  html += '<label class="field">Тип сетапа<select id="typSel">';
-  [["all","Все типы"],["breakout","Пробой уровня"],["bounce","Отскок от уровня"],["pullback","Откат по тренду"]].forEach((x) => {
-    html += '<option value="'+x[0]+'"'+(state.typ===x[0]?" selected":"")+">"+x[1]+"</option>";
-  });
-  html += "</select></label>";
-  html += '<label class="field">Направление<select id="sideSel">';
-  [["all","Лонг и шорт"],["long","Только лонг"],["short","Только шорт"]].forEach((x) => {
-    html += '<option value="'+x[0]+'"'+(state.side===x[0]?" selected":"")+">"+x[1]+"</option>";
-  });
-  html += "</select></label></div>";
-  html += '<button class="btn" type="button" id="refreshBtn"' + (state.loading ? " disabled" : "") + ">" + (state.loading ? "Обновляю…" : "Обновить свечи") + "</button></section>";
-  html += '<section class="section"><h2>Сигналы</h2><div class="cap">Стоп за структурой. Тейк 1 — ближайшая цель, тейк 2 — расширенная. График: свечи, EMA20 и EMA50, линии входа, стопа и тейков. Нажмите карточку, чтобы подставить сигнал в калькулятор.</div>';
-  if (!f.length) html += "<p>Нет сигналов, которые проходят выбранные фильтры.</p>";
-  else {
-    html += '<div class="grid2" style="grid-template-columns:1fr">';
-    // on wider screens 2 cols for cards via media? keep 1 col on mobile, 2 if room
-    html += f.map((s) => signalCardHtml(s, sel && sel.id === s.id)).join("");
-    html += "</div>";
-  }
-  html += "</section>";
-  return html;
-}
-
-function renderCalc() {
-  const sel = selectedSig();
-  const calc = calcFor(sel);
-  let html = '<section class="section"><h2>Калькулятор объёма</h2>';
-  html += "<p>Объём считается от риска и расстояния до стопа, не от плеча. Плечо только снижает маржу. Кнопка на карточке сигнала подставляет его сюда.</p>";
-  if (sel) html += "<p>Сейчас в калькуляторе: " + esc(sel.coin + " · " + SIDE_LABEL[sel.side].toLowerCase() + " · " + TYPE_LABEL[sel.type].toLowerCase() + " · вход " + fmt(sel.entry) + " · стоп " + fmt(sel.sl)) + ".</p>";
-  html += '<div class="filters">';
-  html += '<label class="field">Депозит, $<input id="eqIn" type="number" value="'+esc(state.equity)+'"></label>';
-  html += '<label class="field">Риск на сделку, %<input id="riskIn" type="number" value="'+esc(state.riskPct)+'"></label>';
-  html += '<label class="field">Плечо<input id="levIn" type="number" value="'+esc(state.lev)+'"></label></div>';
-  if (calc && sel) {
-    html += '<div class="metrics">';
-    html += '<div class="metric"><b>$'+fmt(calc.riskUsd,2)+'</b><span>Риск в деньгах · '+fmt(num(state.riskPct),2)+'% от '+fmt(calc.dep,2)+'</span></div>';
-    html += '<div class="metric"><b>'+fmt(calc.qty, Math.max(4, decimals(calc.qty)))+'</b><span>Объём, монеты</span></div>';
-    html += '<div class="metric"><b>$'+fmt(calc.notional,2)+'</b><span>Номинал</span></div>';
-    html += '<div class="metric"><b>$'+fmt(calc.margin,2)+'</b><span>Маржа · плечо '+fmt(calc.L,0)+'x</span></div></div>';
-    html += '<div class="props"><div><div class="k">Ликвидация (грубо, 1/плечо)</div><div>'+fmt(calc.liq)+'</div></div>';
-    html += '<div><div class="k">Стоп</div><div>'+fmt(sel.sl)+'</div></div>';
-    html += '<div><div class="k">Запас до ликвидации</div><div>'+(calc.liqBefore ? "нет — ликвидация ближе стопа" : "ликвидация дальше стопа")+'</div></div></div>';
-    if (calc.liqBefore) html += '<div class="callout danger"><b>Плечо слишком высокое для этого стопа</b>Уменьшите плечо, иначе на кроссе позиция может закрыться раньше стопа.</div>';
-    if (calc.margin > calc.dep) html += '<div class="callout danger"><b>Маржи не хватает</b>Нужная маржа больше депозита. Уменьшите риск или увеличьте плечо только если ликвидация остаётся дальше стопа.</div>';
-    html += miniChart((state.book[sel.symbol] && state.book[sel.symbol][sel.tf]) || [], sel);
-  }
-  html += "</section>";
-  return html;
-}
-
-function renderInfo() {
-  let html = '<div class="callout"><b>Это не торговая рекомендация</b>Правила механические и не учитывают новости, фондинг и ваш конкретный график. Сделки не отправляются на биржу. Риск, стоп и вход подтверждаете сами. На кросс-марже с капиталом около $90 ошибка в объёме дороже «пропущенного» входа.</div>';
-  html += '<section class="section"><h2>Как устроены правила</h2>';
-  html += "<p>Сигнал ищется на последних трёх свечах выбранного таймфрейма. Стоп ставится за структуру плюс небольшой буфер ATR. Идеи с RR до тейка 1 ниже 1,2 отбрасываются.</p>";
-  html += "<table><thead><tr><th>Сетап</th><th>Что должно быть</th><th>Вход и стоп</th><th>Цели</th></tr></thead><tbody>";
-  html += "<tr><td>Пробой уровня</td><td>Диапазон 30 свечей (1,2–18%) и закрытие за его границей, объём ≥ 1,35× средней</td><td>Вход у закрытия пробоя, стоп за последним колебанием внутри диапазона</td><td>Тейк 1 = ширина диапазона, тейк 2 = 1,618×</td></tr>";
-  html += "<tr><td>Отскок от уровня</td><td>Уровень, который цена тестировала ≥ 3 раз, и свеча с длинной тенью от него</td><td>Вход у закрытия отбоя, стоп за тенью и уровнем</td><td>Тейк 1 — следующий уровень или 1,8R, тейк 2 — 3R</td></tr>";
-  html += "<tr><td>Откат по тренду</td><td>EMA20 и EMA50 в одну сторону, был вынос, затем касание EMA20 и закрытие обратно</td><td>Вход у закрытия, стоп за минимум (максимум) отката</td><td>Тейк 1 — прошлый экстремум или 1,8R, тейк 2 — 3R</td></tr>";
-  html += "</tbody></table></section>";
-  html += '<section class="section"><h2>Как часто правило доходило до тейка 1</h2><div class="cap">Снимок бэктеста, не живой трекер.</div>';
-  html += "<p>" + esc(BACKTEST_NOTE) + "</p>";
-  html += "<table><thead><tr><th>Сетап</th><th>Срабатываний</th><th>Тейк 1 первым</th><th>Стоп первым</th><th>Середина</th></tr></thead><tbody>";
-  ["breakout","bounce","pullback"].forEach((k) => {
-    html += "<tr><td>"+TYPE_LABEL[k]+"</td><td>"+BACKTEST[k].n+"</td><td>"+pct(BACKTEST[k].tp,BACKTEST[k].n)+"</td><td>"+pct(BACKTEST[k].sl,BACKTEST[k].n)+"</td><td>"+pct(BACKTEST[k].mid,BACKTEST[k].n)+"</td></tr>";
-  });
-  html += "</tbody></table>";
-  html += "<p>Для отката безубыток при RR ≈ 2 около 33% тейков; факт 31,6% — около нуля без комиссий. Отскок 35,1% при типичном 1,8R тоже около нуля. Пробой слабее и чаще остаётся в середине горизонта. Это не обещание результата.</p>";
-  html += "<p>Доска только показывает идеи. Ни одна кнопка не отправляет ордер на Bybit.</p></section>";
-  return html;
-}
-
-function bindPage() {
-  const page = document.getElementById("page");
-  const refreshBtn = document.getElementById("refreshBtn");
-  if (refreshBtn) refreshBtn.onclick = () => { buzz("medium"); refresh(); };
-  page.querySelectorAll("[data-agent]").forEach((b) => b.addEventListener("click", () => {
-    buzz("light");
-    const k = b.getAttribute("data-agent");
-    if (k === "risk") state.tab = "calc";
-    else { state.typ = k; state.tab = "signals"; }
-    renderAll();
-  }));
-  page.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
-    buzz("light"); state.selectedId = b.getAttribute("data-open"); state.typ = "all"; state.tab = "signals"; renderAll();
-  }));
-  page.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => {
-    buzz("medium"); state.selectedId = b.getAttribute("data-pick"); state.tab = "calc"; renderAll();
-  }));
-  page.querySelectorAll("[data-tf]").forEach((b) => b.addEventListener("click", () => { buzz("light"); state.tf = b.getAttribute("data-tf"); renderAll(); }));
-  const typSel = document.getElementById("typSel");
-  if (typSel) typSel.onchange = () => { state.typ = typSel.value; renderAll(); };
-  const sideSel = document.getElementById("sideSel");
-  if (sideSel) sideSel.onchange = () => { state.side = sideSel.value; renderAll(); };
-  function bindNum(id, key) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener("input", () => { state[key] = el.value; });
-    el.addEventListener("change", () => { state[key] = el.value; renderPage(); bindPage(); });
-  }
-  bindNum("eqIn", "equity"); bindNum("riskIn", "riskPct"); bindNum("levIn", "lev");
-}
-
-function renderPage() {
-  const page = document.getElementById("page");
-  if (state.tab === "home") page.innerHTML = renderHome();
-  else if (state.tab === "signals") page.innerHTML = renderSignals();
-  else if (state.tab === "calc") page.innerHTML = renderCalc();
-  else page.innerHTML = renderInfo();
-  bindPage();
-}
-function renderAll() { renderChrome(); renderPage(); }
-
-function init() {
-  applyTelegram();
-  document.getElementById("clock").textContent = fmtClock(Date.now());
-  setInterval(() => { const el = document.getElementById("clock"); if (el) el.textContent = fmtClock(Date.now()); }, 1000);
-  setInterval(() => { state.flip = !state.flip; if (state.tab === "home") renderPage(); }, 4200);
-  const w = tg();
-  if (w && w.onEvent) {
-    w.onEvent("themeChanged", applyTelegram);
-    w.onEvent("viewportChanged", applyTelegram);
-  }
-  renderAll();
-  startCountUp(state.signals.length);
-  scheduleToastHide();
-  refresh();
-}
-init();
-
-  </script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer onerror="window.__lwcFail=1"></script>
+<script src="app.js?v=1" defer></script>
 </body>
 </html>
