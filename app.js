@@ -1,12 +1,16 @@
 'use strict';
 /* ===== Signals board — client-side only. Data: Bybit v5 public → OKX → Gate. No keys, no trading. ===== */
-const CFG = { TOP: 30, TFS: ['15m', '1h', '4h'], CONC: 6, TIMEOUT: 9000, REFRESH_MARKET: 60e3, REFRESH_SIGNALS: 180e3 };
-const STABLE = /^(USDC|USDE|FDUSD|TUSD|DAI|BUSD|USDD|PYUSD|USD1|EUR|XAUT|PAXG)$/;
+const CFG = { TOP: 100, TFS: ['15m', '1h', '4h'], CONC: 8, TIMEOUT: 9000, REFRESH_MARKET: 60e3, REFRESH_SIGNALS: 180e3 };
+const STABLE = /^(USDT|USDC|USDE|FDUSD|TUSD|DAI|BUSD|USDD|PYUSD|USD1|USDS|USDG|USDP|USDQ|USDR|USDX|USD0|RLUSD|BFUSD|LUSD|SUSD|GUSD|FRAX|CRVUSD|GHO|EUR|EURC|EURI|XAUT|PAXG)$/;
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const FORCE = new URLSearchParams(location.search).get('src'); // ?src=okx|gate for testing
 
 /* ---------- utils ---------- */
+/* per-host request throttle: keeps us under public rate limits (Bybit 600/5s, OKX candles 40/2s, Gate 200/10s) */
+const RL_MS = { 'api.bybit.com': 25, 'www.okx.com': 60, 'api.gateio.ws': 55 }, RL_NEXT = {};
+async function throttle(url) { let h = ''; try { h = new URL(url).host; } catch (e) { } const gap = RL_MS[h]; if (!gap) return; const now = Date.now(), at = Math.max(now, RL_NEXT[h] || 0); RL_NEXT[h] = at + gap; if (at > now) await new Promise(r => setTimeout(r, at - now)); }
 async function getJSON(url, ms = CFG.TIMEOUT) {
+  await throttle(url);
   const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
   try { const r = await fetch(url, { signal: ac.signal, cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
   finally { clearTimeout(t); }
@@ -95,7 +99,7 @@ const TYPE_RU = { breakout: 'Пробой', bounce: 'Отскок', pullback: '�
 const TF_RU = { '15m': '15м', '1h': '1ч', '4h': '4ч' };
 
 /* ---------- state ---------- */
-const CONC = () => PROV === 'okx' ? 4 : CFG.CONC;
+const CONC = () => PROV === 'okx' ? 6 : CFG.CONC;
 const S = { coins: [], signals: [], an: {}, f: { setups: new Set(), dir: null, tf: 'all', str: 1, q: '', tradfi: false }, sort: 'new', loading: false, fng: null, btcOi: null };
 try { const saved = JSON.parse(localStorage.getItem('sb_f') || '{}'); if (saved.setups) S.f.setups = new Set(saved.setups); Object.assign(S.f, { tradfi: !!saved.tradfi, dir: saved.dir ?? null, tf: saved.tf || 'all', str: saved.str || 1 }); S.sort = saved.sort || 'new'; } catch (e) { }
 const saveF = () => localStorage.setItem('sb_f', JSON.stringify({ setups: [...S.f.setups], tradfi: S.f.tradfi, dir: S.f.dir, tf: S.f.tf, str: S.f.str, sort: S.sort }));
@@ -177,11 +181,11 @@ async function refreshSignals() {
       const h = S.an[c.base + HTF[tf]]; const htfTrend = tf === '4h' ? (an.e50[an.n] > an.e50[an.n - 10] ? 1 : -1) * (an.trend !== 0 ? 1 : 0) : h ? h.trend : 0;
       const d = detect(an, tf, c, htfTrend).sort((p, q) => q.strength - p.strength || q.rr - p.rr); if (d.length) found.push(d[0]);
       try { const sm = detectSMC(an, tf, c, htfTrend); if (sm.length) found.push(sm[0]); } catch (e) { console.warn('smc', e); }
-    } finally { done++; prog.style.width = (done / jobs.length * 100) + '%'; if (done % 8 === 0) { S.signals = found.slice(); renderSignals(); renderMarkets(); } }
+    } finally { done++; prog.style.width = (done / jobs.length * 100) + '%'; if (done % 6 === 0 || done === jobs.length) { $('#upd').textContent = `Сканирую монеты: ${Math.min(S.coins.length, Math.round(done / CFG.TFS.length))} из ${S.coins.length} · найдено ${found.length}`; } if (done % 12 === 0) { S.signals = found.slice(); renderSignals(); renderMarkets(); } }
   });
   S.signals = found; S.lastScan = new Date();
   renderSignals(); renderMarkets(); renderHeader();
-  $('#upd').textContent = 'Обновлено ' + timeStr(S.lastScan) + ' · авто каждые 3 мин';
+  $('#upd').textContent = 'Обновлено ' + timeStr(S.lastScan) + ' · ' + S.coins.length + ' монет · авто каждые 3 мин';
   setTimeout(() => prog.style.width = '0', 600);
   S.loading = false; $('#refresh').classList.remove('spin');
 }
