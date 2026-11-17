@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <div class="blobs"><i></i><i></i><i></i></div>
@@ -27,6 +27,10 @@
     <div class="tb-item"><div style="text-align:center"><div class="lbl">Страх и жадность</div><canvas class="gauge" id="gauge" width="168" height="92"></canvas><div class="sub" id="tbFngT">—</div></div></div>
     <div class="tb-item"><div><div class="lbl">Funding (BTC)</div><div class="val" id="tbFund">—</div><div class="sub mut" id="tbFundN">—</div></div></div>
     <div class="tb-item" style="flex:1"><div><div class="lbl">Open Interest (BTC)</div><div class="val" id="tbOi">—</div><div class="sub" id="tbOiC">—</div></div><canvas class="spark" id="oiSpark" width="220" height="68" style="margin-left:auto"></canvas></div>
+    <a class="tb-item demo" id="demoW" href="https://petraballas.github.io/paper-trades/" target="_blank" rel="noopener" title="Открыть демо-счёт бота">
+      <div><div class="lbl">💼 Демо-счёт бота <span class="ddot" id="dDot"></span></div><div class="val" id="dEq">—</div><div class="sub" id="dChg">загрузка…</div><div class="sub mut" id="dToday"></div></div>
+      <canvas class="spark" id="dSpark" width="200" height="68"></canvas><span class="dgo">↗</span>
+    </a>
   </header>
 
   <div class="main">
@@ -73,6 +77,11 @@
             <div class="vline"></div>
             <div class="col"><div class="mut" style="font-size:13px">Тренд BTC 4ч</div><div style="font-size:16px;font-weight:700" id="mTrend">—</div></div>
           </div>
+          <a class="row mdemo" href="https://petraballas.github.io/paper-trades/" target="_blank" rel="noopener">
+            <div class="col"><div class="mut" style="font-size:13px">💼 Демо-счёт бота <span class="ddot" id="mdDot"></span></div><div style="font-size:12px" class="mut" id="mdSub">загрузка…</div></div>
+            <div style="text-align:right"><div style="font-size:20px;font-weight:700" id="mdEq">—</div><div style="font-size:13px" id="mdChg"></div></div>
+            <span class="dgo">›</span>
+          </a>
         </div>
         <div class="chips mob-only" id="chips">
           <button class="chip" data-setup="breakout">⚡ Пробой</button>
@@ -173,6 +182,6 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer onerror="window.__lwcFail=1"></script>
 <script src="core.js?v=4" defer></script>
-<script src="app.js?v=5" defer></script>
+<script src="app.js?v=6" defer></script>
 </body>
 </html>

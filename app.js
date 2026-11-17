@@ -456,7 +456,7 @@ function updatePricesUI() {
   }
   if (Date.now() - lastMini > 4000 && S.view) { lastMini = Date.now(); $$('#grid canvas.mini').forEach(cv => { const s = S.view[+cv.dataset.i]; if (s && s.coin.tickAt && s.coin.tickAt > (cv._t || 0)) { cv._t = Date.now(); drawMini(cv, s); } }); }
   if (chartSeries) { const { cs, an, T } = chartSeries, b = an.bars[an.bars.length - 1]; try { cs.update({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); } catch (e) { } }
-  favLive(); renderHeader(); setLivePill();
+  favLive(); if (DEMO.st) renderDemo(); renderHeader(); setLivePill();
 }
 function setLivePill() {
   const el = $('#live'); if (!el) return;
@@ -577,6 +577,46 @@ function dtab(t) { document.body.classList.toggle('dfav', t === 'fav'); $$('.dna
 function openFavTab() { if (innerWidth <= 820) tab('fav'); else dtab('fav'); scrollTo(0, 0); }
 setInterval(() => { if (!document.hidden) favBackfillAll(); }, 6e4);
 favCount();
+
+/* ---------- paper bot demo-account widget (reads the bot's public state.json; live prices add unrealized PnL) ---------- */
+const DEMO = { st: null, at: 0, sparkAt: 0 };
+const DEMO_URLS = ['https://raw.githubusercontent.com/petraballas/paper-trades/data/state.json', 'https://petraballas.github.io/paper-trades/state.json'];
+async function loadDemo() {
+  const res = await Promise.allSettled(DEMO_URLS.map(u => getJSON(u + '?t=' + Date.now(), 10000)));
+  const ok = res.filter(r => r.status === 'fulfilled' && r.value && isFinite(r.value.balance)).map(r => r.value).sort((a, b) => (b.lastRun || 0) - (a.lastRun || 0));
+  if (ok.length && (!DEMO.st || (ok[0].lastRun || 0) >= (DEMO.st.lastRun || 0))) { DEMO.st = ok[0]; DEMO.at = Date.now(); DEMO.sparkAt = 0; }
+  renderDemo();
+}
+const usd = v => (v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usdS = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' $';
+function demoCalc() {
+  const s = DEMO.st, start = (s.rules && s.rules.START) || 1000; let u = 0, live = false, open = 0;
+  for (const p of s.positions || []) { if (p.status !== 'open' || !p.qty) continue; open++; let px = p.last ?? p.fill; const c = typeof coinOf === 'function' ? coinOf(p.base) : null;
+    if (c && c.last && px && Math.abs(c.last / px - 1) < 0.2) { px = c.last; live = true; } // guard against 1000x symbol mismatch
+    u += (p.dir === 'long' ? px - p.fill : p.fill - px) * p.qty; }
+  const eq = s.balance + u, mid = new Date().setHours(0, 0, 0, 0), ser = s.equity || [];
+  const before = ser.filter(x => x.t < mid).pop(); const base = before ? before.e : (s.created >= mid ? start : (ser[0] ? ser[0].e : start));
+  return { eq, start, chg: eq - start, pc: (eq / start - 1) * 100, today: eq - base, open, pend: (s.pending || []).length, live, ser: ser.map(x => x.e).concat(eq) };
+}
+function renderDemo() {
+  const set = (id, html, c) => { const el = $(id); if (!el) return; el.innerHTML = html; if (c !== undefined) el.className = c; };
+  if (!DEMO.st) { set('#dChg', 'нет данных', 'sub mut'); set('#mdSub', 'нет данных'); return; }
+  const d = demoCalc(), stale = Date.now() - (DEMO.st.lastRun || 0) > 15 * 6e4;
+  const dot = d.live && !stale ? 'ddot on' : stale ? 'ddot stale' : 'ddot';
+  const runAgo = DEMO.st.lastRun ? ago(DEMO.st.lastRun) : '';
+  const tip = `Бот обновлял ${runAgo}${d.live ? ' · нереализованный PnL по live-ценам' : ''}`;
+  ['#dDot', '#mdDot'].forEach(i => { const el = $(i); if (el) { el.className = dot; el.title = tip; } });
+  set('#dEq', usd(d.eq)); set('#mdEq', usd(d.eq));
+  set('#dChg', `${usdS(d.chg)} (${pct(d.pc)}) <span class="mut">с $${d.start}</span>`, 'sub ' + cls(d.chg));
+  const pos = `${d.open} поз.${d.pend ? ' · ' + d.pend + ' ждут' : ''}`;
+  set('#dToday', `сегодня <span class="${cls(d.today)}">${usdS(d.today)}</span> · ${pos}`, 'sub mut');
+  set('#mdChg', `${pct(d.pc)} · ${usdS(d.chg)}`); const mc = $('#mdChg'); if (mc) mc.className = cls(d.chg);
+  set('#mdSub', `сегодня <span class="${cls(d.today)}">${usdS(d.today)}</span> · ${pos}`);
+  const w = $('#demoW'); if (w) w.title = 'Открыть демо-счёт бота · ' + tip;
+  if (Date.now() - DEMO.sparkAt > 5000 && d.ser.length > 1) { DEMO.sparkAt = Date.now(); drawSpark($('#dSpark'), d.ser); }
+}
+loadDemo(); setInterval(() => { if (!document.hidden) loadDemo(); }, 45e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - DEMO.at > 3e4) loadDemo(); });
 
 /* ---------- boot ---------- */
 wire(); syncFilterUI(); calc();
