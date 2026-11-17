@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <div class="blobs"><i></i><i></i><i></i></div>
@@ -57,6 +57,7 @@
 
     <!-- center -->
     <section class="center-col">
+      <div class="dnav desk-only"><button data-dtab="signals" class="on">📡 Сигналы</button><button data-dtab="fav">⭐ Избранное <span class="favCnt"></span></button></div>
       <div class="view on" id="v-signals">
         <!-- mobile summary -->
         <div class="summary glass mob-only">
@@ -97,6 +98,18 @@
         <div class="status"><a class="pill" href="https://petraballas.github.io/paper-trades/" style="color:var(--green);text-decoration:none;border-color:rgba(61,220,151,.4)">💼 Демо-счёт бота →</a><span class="pill" id="src">Источник: —</span><span class="pill live" id="live">○ подключение…</span><span id="upd">Загрузка…</span><span id="cnt"></span></div>
         <div class="progress"><i id="prog"></i></div>
         <div class="grid" id="grid"></div>
+      </div>
+
+      <div class="view" id="v-fav">
+        <div class="head">
+          <div><h1>Избранное</h1><p>Сделки, в которые ты вошёл · хранятся на этом устройстве</p></div>
+          <div class="right">
+            <button class="iconbtn" id="favExport" title="Экспорт в файл" style="width:auto;padding:0 12px;font-size:13px">⬇ Экспорт</button>
+            <label class="iconbtn" title="Импорт из файла" style="width:auto;padding:0 12px;font-size:13px;cursor:pointer">⬆ Импорт<input type="file" id="favImport" accept="application/json,.json" hidden></label>
+          </div>
+        </div>
+        <div class="status" id="favStat"></div>
+        <div class="grid favgrid" id="favList"></div>
       </div>
 
       <div class="view" id="v-markets" style="margin-top:22px">
@@ -142,10 +155,12 @@
 
 <nav class="tabbar glass">
   <button data-tab="signals" class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>Сигналы</button>
+  <button data-tab="fav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Избранное<i class="tbadge favCnt"></i></button>
   <button data-tab="markets"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>Рынки</button>
   <button data-tab="calc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M8 18h2M12 18h2M16 11v7"/></svg>Калькулятор</button>
   <button data-tab="info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Справка</button>
 </nav>
+<div class="toast" id="toast"></div>
 
 <div class="modal" id="modal"><div class="sheet glass">
   <div class="hd"><div id="mIc"></div><div><h2 id="mTitle">—</h2><div class="mut" style="font-size:13px" id="mSub"></div></div><button class="iconbtn close" id="mClose">✕</button></div>
@@ -153,11 +168,11 @@
   <div id="chart"></div>
   <div class="kv" id="mKv"></div>
   <div class="reason" id="mReason" style="font-size:14px;margin-top:10px"></div>
-  <div class="links"><a href="#" id="mCalc">▦ В калькулятор</a><a href="#" id="mBybit" target="_blank" rel="noopener">Открыть на Bybit ↗</a><a href="#" id="mTv" target="_blank" rel="noopener">TradingView ↗</a></div>
+  <div class="links"><a href="#" id="mFav" class="favbtn">⭐ В избранное / Я вошёл</a><a href="#" id="mCalc">▦ В калькулятор</a><a href="#" id="mBybit" target="_blank" rel="noopener">Открыть на Bybit ↗</a><a href="#" id="mTv" target="_blank" rel="noopener">TradingView ↗</a></div>
 </div></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer onerror="window.__lwcFail=1"></script>
 <script src="core.js?v=4" defer></script>
-<script src="app.js?v=4" defer></script>
+<script src="app.js?v=5" defer></script>
 </body>
 </html>

@@ -139,9 +139,13 @@ async function _refreshMarket() {
     const top = all.filter(x => !STABLE.test(x.base) && x.turnover > 0 && x.last > 0 && (!cs || cs.has(x.base))).sort((a, b) => b.turnover - a.turnover).slice(0, CFG.TOP);
     const prev = Object.fromEntries(S.coins.map(c => [c.base, c]));
     S.coins = top.map(c => { const o = prev[c.base]; if (o) o.prevTick = o.last; const r = Object.assign(o || {}, c); r.dirty = true; return r; });
+    const inTop = new Set(S.coins.map(c => c.base)), prevX = Object.fromEntries((S.extra || []).map(c => [c.base, c]));
+    S.extra = [...new Set(FAV.items.map(f => f.base))].filter(b => !inTop.has(b)).map(b => all.find(x => x.base === b)).filter(Boolean)
+      .map(c => { const o = prevX[c.base]; if (o) o.prevTick = o.last; const r = Object.assign(o || {}, c); r.dirty = true; return r; });
     $('#src').textContent = 'Источник: ' + P[PROV].name + (PROV !== 'bybit' ? ' (резерв)' : '');
     S.lastMarket = Date.now(); renderHeader(); renderMarkets(); updatePricesUI();
-    const key = S.coins.map(c => c.base).join(',') + PROV; if (key !== LIVE.key) startLive();
+    const key = liveCoins().map(c => c.base).join(',') + PROV; if (key !== LIVE.key) startLive();
+    favBackfillAll();
   } catch (e) { $('#upd').textContent = 'Нет связи с биржами — повторяю…'; }
   loadFng(); loadBtcExtras();
 }
@@ -277,13 +281,13 @@ async function openCoin(coin, tf, sig) {
   $('#mTitle').textContent = coin.base + '/USDT · ' + TF_RU[tf]; $('#mSub').innerHTML = sig ? `<span class="${sig.dir === 'long' ? 'up' : 'down'}">${sig.dir === 'long' ? 'ЛОНГ' : 'ШОРТ'}</span> · ${TYPE_RU[sig.type]} · ${'★'.repeat(sig.strength)}` : 'Цена ' + fmtP(coin.last) + ' · ' + pct(coin.chg);
   $$('#mTf button').forEach(b => { b.classList.toggle('on', b.dataset.v === tf); b.onclick = () => openCoin(coin, b.dataset.v, sig && sig.tf === b.dataset.v ? sig : null); });
   $('#mBybit').href = `https://www.bybit.com/trade/usdt/${coin.base}USDT`; $('#mTv').href = `https://www.tradingview.com/chart/?symbol=BYBIT:${coin.base}USDT.P`;
-  $('#mCalc').style.display = sig ? '' : 'none';
+  $('#mCalc').style.display = sig ? '' : 'none'; setFavBtn(sig);
   let an = S.an[coin.base + tf]; if (!an) { try { an = analyze(await klines(coin, tf), tf); if (an) S.an[coin.base + tf] = an; } catch (e) { } }
-  const kv = []; if (sig) kv.push(['Вход', fmtP(sig.entry)], ['Стоп', `<span class="down">${fmtP(sig.sl)}</span>`], ['Тейк 1 (1.5R)', fmtP(sig.tp1)], ['Тейк 2', `<span class="up">${fmtP(sig.tp2)}</span>`], ['R:R', '1:' + sig.rr.toFixed(2)], ['Стоп в ATR', (Math.abs(sig.entry - sig.sl) / sig.atr).toFixed(2)]);
+  const kv = []; if (sig) kv.push(['Вход', fmtP(sig.entry)], ['Стоп', `<span class="down">${fmtP(sig.sl)}</span>`], ['Тейк 1 (1.5R)', fmtP(sig.tp1)], ['Тейк 2', `<span class="up">${fmtP(sig.tp2)}</span>`], ['R:R', '1:' + sig.rr.toFixed(2)], ...(sig.atr ? [['Стоп в ATR', (Math.abs(sig.entry - sig.sl) / sig.atr).toFixed(2)]] : []));
   if (an) { const n = an.n; kv.push(['RSI(14)', an.r[n].toFixed(1)], ['ATR(14)', fmtP(an.A[n]) + ` (${(an.A[n] / an.c[n] * 100).toFixed(2)}%)`], ['EMA20 / EMA50', fmtP(an.e20[n]) + ' / ' + fmtP(an.e50[n])], ['VWAP', fmtP(an.vw[n])], ['POC', fmtP(an.vp.poc)], ['VAH / VAL', fmtP(an.vp.vah) + ' / ' + fmtP(an.vp.val)], ['Тренд', an.trend > 0 ? '<span class="up">▲ вверх</span>' : an.trend < 0 ? '<span class="down">▼ вниз</span>' : 'флэт']); }
   kv.push(['Funding', coin.funding == null ? '—' : (coin.funding * 100).toFixed(4) + '%'], ['OI', coin.oiUsd ? fmtBig(coin.oiUsd) + ' $' : '—'], ['Оборот 24ч', fmtBig(coin.turnover) + ' $']);
   $('#mKv').innerHTML = kv.map(([k, v]) => `<div><small>${k}</small>${v}</div>`).join('');
-  $('#mReason').innerHTML = sig ? `<b>Почему:</b> ${esc(sig.why)}${sig.tags.length ? '. Плюс: ' + esc(sig.tags.join(', ')) : ''}.${sig.fresh ? '' : ' Сигнал на одну-две свечи раньше — цена могла уйти от входа.'}` : '';
+  $('#mReason').innerHTML = sig ? `${sig.fav ? `<b>⭐ Из избранного</b> · сохранено ${dtStr(sig.fav.savedAt)}${sig.fav.entry !== sig.fav.sigEntry ? ' · твой вход ' + fmtP(sig.fav.entry) : ''}<br>` : ''}<b>Почему:</b> ${esc(sig.why)}${(sig.tags || []).length ? '. Плюс: ' + esc(sig.tags.join(', ')) : ''}.${sig.fresh ? '' : ' Сигнал на одну-две свечи раньше — цена могла уйти от входа.'}` : '';
   drawBig(an, sig);
 }
 function drawBig(an, sig) {
@@ -302,7 +306,8 @@ function drawBig(an, sig) {
   const pl = (p, color, title, style = 2) => cs.createPriceLine({ price: p, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title });
   pl(an.vp.poc, 'rgba(255,255,255,.45)', 'POC', 1); pl(an.vp.vah, 'rgba(255,255,255,.25)', 'VAH', 3); pl(an.vp.val, 'rgba(255,255,255,.25)', 'VAL', 3);
   if (sig) { pl(sig.entry, '#e8eaff', 'Вход'); pl(sig.sl, '#ff5e7a', 'Стоп'); pl(sig.tp1, '#3ddc97', 'Тейк 1'); pl(sig.tp2, '#3ddc97', 'Тейк 2');
-    cs.setMarkers([{ time: T(an.closed[sig.barIdx].t), position: sig.dir === 'long' ? 'belowBar' : 'aboveBar', color: sig.dir === 'long' ? '#3ddc97' : '#ff5e7a', shape: sig.dir === 'long' ? 'arrowUp' : 'arrowDown', text: TYPE_RU[sig.type] }]); }
+    const mk = sig.fav ? an.bars.filter(b => b.t <= sig.fav.savedAt).pop() : an.closed[sig.barIdx];
+    if (mk) cs.setMarkers([{ time: T(mk.t), position: sig.dir === 'long' ? 'belowBar' : 'aboveBar', color: sig.dir === 'long' ? '#3ddc97' : '#ff5e7a', shape: sig.dir === 'long' ? 'arrowUp' : 'arrowDown', text: sig.fav ? '⭐ вход' : TYPE_RU[sig.type] }]); }
   chart.timeScale().setVisibleLogicalRange({ from: an.bars.length - 90, to: an.bars.length + 3 });
 }
 const dec = p => { const a = Math.abs(p); return a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 3 : a >= 0.1 ? 4 : a >= 0.01 ? 5 : a >= 0.001 ? 6 : 8; };
@@ -374,12 +379,16 @@ function wire() {
   ['#cDep', '#cRisk', '#cLev', '#cEntry', '#cSl', '#cTp'].forEach(id => $(id).addEventListener('input', calc));
   try { const c = JSON.parse(localStorage.getItem('sb_c') || '{}'); if (c.dep) $('#cDep').value = c.dep; if (c.risk) $('#cRisk').value = c.risk; if (c.lev) $('#cLev').value = c.lev; } catch (e) { }
   $$('.tabbar button').forEach(b => b.onclick = () => tab(b.dataset.tab));
+  $$('.dnav button').forEach(b => b.onclick = () => dtab(b.dataset.dtab));
+  $('#mFav').onclick = e => { e.preventDefault(); if (!curSig) return; const id = favId(curSig); if (FAV.items.some(f => f.id === id) || curSig.fav) { closeModal(); openFavTab(); return; } favAdd(curSig); setFavBtn(curSig); toast('⭐ Сохранено в избранное'); };
+  $('#favExport').onclick = favExport; $('#favImport').onchange = favImport;
+  $('#favList').addEventListener('click', favClick); $('#favList').addEventListener('input', favInput); $('#favList').addEventListener('change', favChange);
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { renderSignals(); renderHeader(); }, 200); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) return; refreshMarket(); if (!liveOk()) startLive(); if (S.lastScan && Date.now() - S.lastScan > CFG.REFRESH_SIGNALS) refreshSignals(); });
   addEventListener('pageshow', e => { if (e.persisted) { refreshMarket(); startLive(); } });
   addEventListener('online', () => { refreshMarket(); startLive(); });
 }
-function tab(t) { $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t)); scrollTo(0, 0); if (t === 'signals') renderSignals(); }
+function tab(t) { if (t === 'fav') renderFav(); $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t)); scrollTo(0, 0); if (t === 'signals') renderSignals(); }
 
 /* ---------- live prices (WebSocket, with provider fallback) ---------- */
 const now = () => Math.floor(Date.now() / 1000);
@@ -404,9 +413,9 @@ function startLive(skipCurrent) {
   if (skipCurrent && LIVE.prov) LIVE.tried.push(LIVE.prov); else if (!skipCurrent) LIVE.tried = [];
   let k = pref.find(x => !LIVE.tried.includes(x)); if (!k) { LIVE.tried = []; k = pref[0]; }
   stopLive(); const gen = LIVE.gen, W = WSP[k];
-  LIVE.prov = k; LIVE.started = Date.now(); LIVE.last = 0; LIVE.key = S.coins.map(c => c.base).join(',') + PROV;
+  LIVE.prov = k; LIVE.started = Date.now(); LIVE.last = 0; LIVE.key = liveCoins().map(c => c.base).join(',') + PROV;
   // map provider symbol -> coin (same provider: use its own id, e.g. 1000PEPEUSDT)
-  const map = {}; S.coins.forEach(c => { map[k === PROV ? c.id : W.sym(c)] = c; });
+  const map = {}; liveCoins().forEach(c => { map[k === PROV ? c.id : W.sym(c)] = c; });
   let ws; try { ws = new WebSocket(W.url); } catch (e) { return; }
   LIVE.ws = ws;
   ws.onopen = () => { if (gen !== LIVE.gen) return; W.subs(Object.keys(map)).forEach(m => ws.send(JSON.stringify(m))); LIVE.pingT = setInterval(() => { try { const p = W.ping(); ws.send(typeof p === 'string' ? p : JSON.stringify(p)); } catch (e) { } }, 18e3); };
@@ -422,7 +431,7 @@ function applyTick(c, t) {
   if (!c) return; const p = +t.last;
   if (t.last !== undefined && t.last !== '' && isFinite(p) && p > 0) {
     if (c.last && Math.abs(p / c.last - 1) > 0.25) return; // symbol mismatch guard (e.g. 1000x contracts)
-    c.prevTick = c.last; c.last = p; LIVE.last = Date.now(); c.tickAt = LIVE.last;
+    c.prevTick = c.last; c.last = p; LIVE.last = Date.now(); c.tickAt = LIVE.last; favTick(c.base, p);
     for (const tf of CFG.TFS) { const an = S.an[c.base + tf]; if (!an) continue; const b = an.bars, L = b[b.length - 1], ms = tfMs(tf);
       if (Date.now() >= L.t + ms) { const t0 = L.t + Math.floor((Date.now() - L.t) / ms) * ms; b.push({ t: t0, o: p, h: p, l: p, c: p, v: 0 }); } else { L.c = p; if (p > L.h) L.h = p; if (p < L.l) L.l = p; }
       an.last = p; }
@@ -436,7 +445,7 @@ let uiT = null, lastUI = 0, lastMini = 0;
 function scheduleUI() { if (uiT) return; const wait = Math.max(0, 700 - (Date.now() - lastUI)); uiT = setTimeout(() => { uiT = null; lastUI = Date.now(); requestAnimationFrame(updatePricesUI); }, wait); }
 function flash(el, up) { el.classList.remove('tk-up', 'tk-dn'); void el.offsetWidth; el.classList.add(up ? 'tk-up' : 'tk-dn'); }
 function updatePricesUI() {
-  for (const c of S.coins) {
+  for (const c of liveCoins()) {
     if (!c.dirty && !c.prevTick) continue; const up = c.prevTick == null ? null : c.last > c.prevTick ? true : c.last < c.prevTick ? false : null;
     $$(`[data-px="${c.base}"]`).forEach(el => { const t = fmtP(c.last); if (el.textContent !== t) { el.textContent = t; if (up !== null) flash(el, up); } });
     $$(`[data-chg="${c.base}"]`).forEach(el => { el.textContent = pct(c.chg); el.className = cls(c.chg); });
@@ -447,13 +456,127 @@ function updatePricesUI() {
   }
   if (Date.now() - lastMini > 4000 && S.view) { lastMini = Date.now(); $$('#grid canvas.mini').forEach(cv => { const s = S.view[+cv.dataset.i]; if (s && s.coin.tickAt && s.coin.tickAt > (cv._t || 0)) { cv._t = Date.now(); drawMini(cv, s); } }); }
   if (chartSeries) { const { cs, an, T } = chartSeries, b = an.bars[an.bars.length - 1]; try { cs.update({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); } catch (e) { } }
-  renderHeader(); setLivePill();
+  favLive(); renderHeader(); setLivePill();
 }
 function setLivePill() {
   const el = $('#live'); if (!el) return;
   if (liveOk()) { el.className = 'pill live on'; el.textContent = '● LIVE · ' + P[LIVE.prov].name; }
   else { el.className = 'pill live'; el.textContent = S.lastMarket ? '○ цены: REST · ' + timeStr(new Date(S.lastMarket)) : '○ подключение…'; }
 }
+
+/* ---------- favorites ("Я вошёл") — snapshots in localStorage, independent of the live signal list ---------- */
+const FAV_KEY = 'sb_fav_v1';
+const FAV = { items: [] };
+try { const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); if (Array.isArray(a)) FAV.items = a; } catch (e) { }
+let favSaveT = null;
+function favSave(now) { const w = () => { clearTimeout(favSaveT); favSaveT = null; try { localStorage.setItem(FAV_KEY, JSON.stringify(FAV.items)); } catch (e) { toast('Не удалось сохранить (память браузера)'); } }; if (now) w(); else if (!favSaveT) favSaveT = setTimeout(w, 1500); }
+addEventListener('pagehide', () => favSave(true));
+addEventListener('storage', e => { if (e.key !== FAV_KEY) return; try { const a = JSON.parse(e.newValue || '[]'); if (Array.isArray(a)) { FAV.items = a; renderFav(); } } catch (x) { } });
+const liveCoins = () => S.coins.concat(S.extra || []);
+const coinOf = base => liveCoins().find(c => c.base === base);
+const favId = s => [s.coin.base, s.tf, s.type, s.dir, s.t].join('|');
+const dtStr = ms => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const ST_RU = { active: '● Активна', tp1: '✓ TP1 достигнут', tp2: '✓✓ TP2 достигнут', stop: '✕ Стоп', tp1stop: 'TP1 ✓ → потом стоп' };
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
+function setFavBtn(sig) { const b = $('#mFav'); if (!b) return; b.style.display = sig ? '' : 'none'; if (!sig) return; const saved = sig.fav || FAV.items.some(f => f.id === favId(sig)); b.classList.toggle('saved', !!saved); b.textContent = saved ? '★ В избранном — открыть' : '⭐ В избранное / Я вошёл'; }
+function favAdd(s) {
+  const now = Date.now();
+  const f = { id: favId(s), base: s.coin.base, sym: s.coin.id, prov: PROV, dir: s.dir, type: s.type, tf: s.tf,
+    entry: s.entry, sigEntry: s.entry, sl: s.sl, tp1: s.tp1, tp2: s.tp2, rr: s.rr, strength: s.strength, why: s.why, tags: s.tags || [],
+    sigT: s.t, savedAt: now, priceAtSave: s.coin.last, note: '', status: 'active', chkT: now, hi: s.coin.last, lo: s.coin.last, statusAt: null };
+  FAV.items.unshift(f); favSave(true); favCount(); renderFav();
+  if (!S.coins.some(c => c.base === f.base)) refreshMarket();
+}
+function favStep(f, hi, lo, t) {
+  if (f.status === 'stop' || f.status === 'tp2' || f.status === 'tp1stop') return false;
+  const L = f.dir === 'long', sl = L ? lo <= f.sl : hi >= f.sl, t1 = L ? hi >= f.tp1 : lo <= f.tp1, t2 = L ? hi >= f.tp2 : lo <= f.tp2, was = f.status;
+  if (f.status === 'active') { if (sl) f.status = 'stop'; else if (t2) f.status = 'tp2'; else if (t1) f.status = 'tp1'; } // same candle: stop first (conservative)
+  else if (f.status === 'tp1') { if (sl) f.status = 'tp1stop'; else if (t2) f.status = 'tp2'; }
+  if (f.status !== was) { f.statusAt = t; return true; } return false;
+}
+function favTick(base, p) {
+  let ch = false; for (const f of FAV.items) { if (f.base !== base) continue; f.last = p; f.hi = Math.max(f.hi ?? p, p); f.lo = Math.min(f.lo ?? p, p); if (favStep(f, p, p, Date.now())) { ch = true; toast(`${f.base}: ${ST_RU[f.status]}`); } f.chkT = Date.now(); }
+  if (ch) { favSave(true); renderFav(); } else favSave();
+}
+// catch up on price history since the last check (e.g. tab was closed) from candles
+let favBfBusy = false, favBfAt = 0;
+async function favBackfillAll(force) {
+  if (favBfBusy || !PROV || !FAV.items.length || (!force && Date.now() - favBfAt < 3e5)) return; favBfBusy = true; favBfAt = Date.now();
+  try { for (const f of FAV.items) { if (['stop', 'tp2', 'tp1stop'].includes(f.status)) continue; try { await favBackfill(f); } catch (e) { } } }
+  finally { favBfBusy = false; favSave(true); renderFav(); }
+}
+async function favBackfill(f) {
+  const from = Math.max(f.savedAt, (f.chkT || f.savedAt) - 6e4), age = Date.now() - from, tf = age < 70 * 36e5 ? '15m' : age < 290 * 36e5 ? '1h' : '4h', ms = tfMs(tf);
+  const coin = coinOf(f.base) || { base: f.base, id: PROV === f.prov ? f.sym : f.base + (PROV === 'okx' ? '-USDT-SWAP' : PROV === 'gate' ? '_USDT' : 'USDT') };
+  const bars = await klines(coin, tf);
+  for (const b of bars) { if (b.t + ms <= from) continue; f.hi = Math.max(f.hi ?? b.h, b.h); f.lo = Math.min(f.lo ?? b.l, b.l); favStep(f, b.h, b.l, Math.max(b.t, f.savedAt)); }
+  if (bars.length) { f.last = bars[bars.length - 1].c; } f.chkT = Date.now();
+}
+function favPnl(f, p) { if (!p || !f.entry) return null; const L = f.dir === 'long', pc = (p / f.entry - 1) * 100 * (L ? 1 : -1), r = (L ? p - f.entry : f.entry - p) / Math.abs(f.entry - f.sl || 1e-12); return { pc, r }; }
+function favNear(f, p) { if (!p || ['stop', 'tp2', 'tp1stop'].includes(f.status)) return f.status === 'active' ? '' : 'сделка по уровням завершена'; const lv = [['стопа', f.sl], ...(f.status === 'tp1' ? [] : [['TP1', f.tp1]]), ['TP2', f.tp2]].map(([n, v]) => [n, Math.abs(p / v - 1) * 100]).sort((a, b) => a[1] - b[1])[0]; return `до ${lv[0]} ${lv[1].toFixed(2)}%`; }
+function favCount() { $$('.favCnt').forEach(el => el.textContent = FAV.items.length ? FAV.items.length : ''); }
+function favPrice(f) { const c = coinOf(f.base); return c && c.last ? c.last : f.last; }
+function renderFav() {
+  favCount(); const el = $('#favList'); if (!el) return; const a = FAV.items;
+  const act = a.filter(f => f.status === 'active' || f.status === 'tp1').length;
+  $('#favStat').innerHTML = a.length ? `<span class="pill">Всего: ${a.length}</span><span class="pill">В работе: ${act}</span><span class="dim">Статус считается по цене с момента сохранения (свечи + live). Тот же свечной бар: сначала стоп.</span>` : '';
+  if (!a.length) { el.innerHTML = '<div class="empty glass" style="grid-column:1/-1">Пока пусто. Открой график сигнала и нажми «⭐ В избранное / Я вошёл» — сделка сохранится здесь, даже когда сигнал исчезнет из списка.</div>'; return; }
+  const d = v => { const x = dec(v); return (+v).toFixed(x); };
+  el.innerHTML = a.map(f => { const L = f.dir === 'long', p = favPrice(f), pn = favPnl(f, p);
+    return `<div class="card glass fav ${f.dir}" data-id="${esc(f.id)}">
+      <div class="top"><div><div class="sym">${esc(f.base)}/USDT</div><div class="stype"><span class="dot" style="margin:0;background:var(--${L ? 'green' : 'red'})"></span>${TYPE_RU[f.type] ? TYPE_RU[f.type].toUpperCase() : ''} · <span class="tf">${TF_RU[f.tf] || f.tf}</span> · <span class="stars">${'★'.repeat(f.strength || 0)}</span></div></div>
+      <span class="badge ${f.dir}">${L ? 'ЛОНГ' : 'ШОРТ'}</span></div>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="stchip st-${f.status}" data-st>${ST_RU[f.status]}</span><span class="dim" style="font-size:12px">сохранено ${dtStr(f.savedAt)}${f.statusAt ? ' · статус с ' + dtStr(f.statusAt) : ''}</span></div>
+      <div class="live-row"><div><div class="dim" style="font-size:11px">Цена сейчас</div><div class="px" data-px="${esc(f.base)}">${fmtP(p)}</div><div class="dim" style="font-size:11px" data-near>${favNear(f, p)}</div></div>
+        <div class="pnl ${pn ? cls(pn.pc) : 'mut'}" data-pnl><span>${pn ? pct(pn.pc) : '—'}</span><small>${pn ? (pn.r >= 0 ? '+' : '') + pn.r.toFixed(2) + 'R от твоего входа' : 'нет цены'}</small></div></div>
+      <div class="lv"><span>Сигнал: вход</span><span>${fmtP(f.sigEntry)}</span><span>R:R</span><span class="up">1:${(+f.rr).toFixed(1)}</span></div>
+      <div class="edit">
+        <label class="me">Мой вход<input inputmode="decimal" data-f="entry" value="${d(f.entry)}"></label>
+        <label>Стоп<input inputmode="decimal" data-f="sl" value="${d(f.sl)}" style="color:var(--red)"></label>
+        <label>Тейк 1<input inputmode="decimal" data-f="tp1" value="${d(f.tp1)}"></label>
+        <label>Тейк 2<input inputmode="decimal" data-f="tp2" value="${d(f.tp2)}" style="color:var(--green)"></label>
+      </div>
+      <div class="reason">${esc(f.why || '')}</div>
+      <textarea data-f="note" placeholder="Заметка: плечо, размер, мысли по сделке…">${esc(f.note || '')}</textarea>
+      <div class="acts"><button data-a="chart">📈 График</button><button data-a="calc">▦ Калькулятор</button><button class="del" data-a="del" title="Удалить">🗑</button></div>
+    </div>`; }).join('');
+}
+function favLive() {
+  if (!FAV.items.length) return; const vis = $('#v-fav'); if (!vis || !vis.offsetParent) return;
+  for (const card of $$('#favList .fav')) { const f = FAV.items.find(x => x.id === card.dataset.id); if (!f) continue; const p = favPrice(f), pn = favPnl(f, p);
+    const pe = card.querySelector('[data-pnl]'); if (pe && pn) { pe.className = 'pnl ' + cls(pn.pc); pe.firstElementChild.textContent = pct(pn.pc); pe.lastElementChild.textContent = (pn.r >= 0 ? '+' : '') + pn.r.toFixed(2) + 'R от твоего входа'; }
+    const ne = card.querySelector('[data-near]'); if (ne) ne.textContent = favNear(f, p);
+    const st = card.querySelector('[data-st]'); if (st && st.textContent !== ST_RU[f.status]) { st.textContent = ST_RU[f.status]; st.className = 'stchip st-' + f.status; } }
+}
+function favFind(e) { const card = e.target.closest('.fav'); return card && FAV.items.find(x => x.id === card.dataset.id); }
+function favInput(e) { const f = favFind(e), k = e.target.dataset.f; if (!f || !k) return; if (k === 'note') { f.note = e.target.value; favSave(); return; }
+  const v = parseFloat(String(e.target.value).replace(',', '.').replace(/\s/g, '')); if (!(v > 0)) return; f[k] = v; if (k === 'entry') { favSave(); favLive(); } }
+function favChange(e) { const f = favFind(e), k = e.target.dataset.f; if (!f || !k || k === 'note') return;
+  if (k !== 'entry') { f.rr = Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12); f.status = 'active'; f.statusAt = null; f.chkT = f.savedAt; f.hi = f.lo = null; favSave(true); renderFav(); favBackfillAll(true); toast('Уровни обновлены — статус пересчитан'); }
+  else { f.rr = Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12); favSave(true); renderFav(); toast('Твой вход сохранён'); } }
+function favSig(f) { const c = coinOf(f.base) || { base: f.base, id: PROV === f.prov ? f.sym : f.base + (PROV === 'okx' ? '-USDT-SWAP' : PROV === 'gate' ? '_USDT' : 'USDT'), last: f.last, chg: null, funding: null };
+  return { coin: c, tf: f.tf, type: f.type, dir: f.dir, entry: f.entry, sl: f.sl, tp1: f.tp1, tp2: f.tp2, rr: Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12), strength: f.strength, why: f.why, tags: f.tags || [], fresh: true, t: f.sigT, fav: f }; }
+function favClick(e) { const b = e.target.closest('button[data-a]'); if (!b) return; const f = favFind(e); if (!f) return; const a = b.dataset.a;
+  if (a === 'chart') { const s = favSig(f); openCoin(s.coin, s.tf, s); }
+  else if (a === 'calc') { toCalc(favSig(f)); if (innerWidth <= 820) tab('calc'); else { dtab('signals'); $('#v-calc').scrollIntoView({ behavior: 'smooth' }); } }
+  else if (a === 'del') { if (!confirm(`Удалить ${f.base} (${f.dir === 'long' ? 'лонг' : 'шорт'}) из избранного?`)) return; FAV.items = FAV.items.filter(x => x !== f); favSave(true); renderFav(); toast('Удалено'); } }
+function favExport() {
+  const data = JSON.stringify({ app: 'signals-board', kind: 'favorites', v: 1, exportedAt: new Date().toISOString(), items: FAV.items }, null, 2);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = 'signals-izbrannoe-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); toast('Файл с избранным сохранён');
+}
+function favImport(e) {
+  const file = e.target.files && e.target.files[0]; if (!file) return; const r = new FileReader();
+  r.onload = () => { try { const j = JSON.parse(r.result); const arr = Array.isArray(j) ? j : j.items; if (!Array.isArray(arr)) throw 0;
+      let n = 0; for (const f of arr) { if (!f || !f.id || !f.base || !(+f.entry > 0) || !(+f.sl > 0) || !['long', 'short'].includes(f.dir)) continue; if (FAV.items.some(x => x.id === f.id)) continue; FAV.items.push(Object.assign({ status: 'active', note: '', tags: [] }, f)); n++; }
+      FAV.items.sort((a, b) => b.savedAt - a.savedAt); favSave(true); renderFav(); toast(n ? `Импортировано: ${n}` : 'Новых сделок в файле нет'); if (n) refreshMarket(); }
+    catch (x) { toast('Не похоже на файл избранного'); } e.target.value = ''; };
+  r.readAsText(file);
+}
+function dtab(t) { document.body.classList.toggle('dfav', t === 'fav'); $$('.dnav button').forEach(b => b.classList.toggle('on', b.dataset.dtab === t)); if (t === 'fav') renderFav(); }
+function openFavTab() { if (innerWidth <= 820) tab('fav'); else dtab('fav'); scrollTo(0, 0); }
+setInterval(() => { if (!document.hidden) favBackfillAll(); }, 6e4);
+favCount();
 
 /* ---------- boot ---------- */
 wire(); syncFilterUI(); calc();
