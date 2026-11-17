@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <div class="blobs"><i></i><i></i><i></i></div>
@@ -164,11 +164,16 @@
         </div>
         <div class="progress"><i id="scProg"></i></div>
 
-        <div class="sc-set glass">
+        <div class="sc-set glass" id="scSet">
           <div class="sc-set-h">
-            <h3>Пороги <span class="dim" style="font-weight:500;font-size:12px">хранятся на этом устройстве</span></h3>
-            <button type="button" class="ghost" id="scReset" style="width:auto;padding:8px 12px">↺ Сбросить</button>
+            <button type="button" class="sc-fold" id="scFold" aria-expanded="true" aria-controls="scSetBody">
+              <span class="sc-chev" aria-hidden="true">▾</span>
+              <span>Пороги</span>
+              <span class="dim" id="scFoldLbl">Свернуть</span>
+            </button>
+            <button type="button" class="ghost" id="scReset">↺ Сбросить</button>
           </div>
+          <div class="sc-set-body" id="scSetBody">
           <div class="sc-grid">
             <div class="field"><label>Памп 5м, %</label><div class="inp"><input id="scP5" inputmode="decimal" autocomplete="off"></div></div>
             <div class="field"><label>Памп 15м, %</label><div class="inp"><input id="scP15" inputmode="decimal" autocomplete="off"></div></div>
@@ -190,6 +195,7 @@
             </div>
           </div>
           <p class="dim" style="font-size:12px;margin:8px 0 0">Памп — рост не меньше порога, дамп — падение не меньше порога. Свечи и открытый интерес запрашиваются только у топа по |движению 24ч| среди монет с достаточным оборотом, чтобы не упираться в лимит Bybit.</p>
+          </div>
         </div>
 
         <div class="sc-tools">
@@ -332,7 +338,7 @@
 <script src="core.js?v=8" defer></script>
 <script src="app.js?v=11" defer></script>
 <script src="journal.js?v=1" defer></script>
-<script src="screener.js?v=8" defer></script>
+<script src="screener.js?v=9" defer></script>
 <script src="stats.js?v=10" defer></script>
 </body>
 </html>
