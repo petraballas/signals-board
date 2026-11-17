@@ -91,7 +91,7 @@ function order() {
 }
 const ORDER = ALL;
 
-const TYPE_RU = { breakout: 'Пробой', bounce: 'Отскок', pullback: 'Откат' };
+const TYPE_RU = { breakout: 'Пробой', bounce: 'Отскок', pullback: 'Откат', smc: 'SMC / Ликвидность' };
 const TF_RU = { '15m': '15м', '1h': '1ч', '4h': '4ч' };
 
 /* ---------- state ---------- */
@@ -176,6 +176,7 @@ async function refreshSignals() {
       if (tf === '1h') c.tr1h = an.trend, c.rsi1h = an.rsiNow; if (tf === '4h') c.tr4h = an.trend;
       const h = S.an[c.base + HTF[tf]]; const htfTrend = tf === '4h' ? (an.e50[an.n] > an.e50[an.n - 10] ? 1 : -1) * (an.trend !== 0 ? 1 : 0) : h ? h.trend : 0;
       const d = detect(an, tf, c, htfTrend).sort((p, q) => q.strength - p.strength || q.rr - p.rr); if (d.length) found.push(d[0]);
+      try { const sm = detectSMC(an, tf, c, htfTrend); if (sm.length) found.push(sm[0]); } catch (e) { console.warn('smc', e); }
     } finally { done++; prog.style.width = (done / jobs.length * 100) + '%'; if (done % 8 === 0) { S.signals = found.slice(); renderSignals(); renderMarkets(); } }
   });
   S.signals = found; S.lastScan = new Date();
@@ -252,9 +253,11 @@ function renderSignals() {
 function drawMini(cv, s) {
   if (!s || !cv.isConnected) return; const an = S.an[s.coin.base + s.tf]; if (!an) return; const [x, w, h] = hidpi(cv); x.clearRect(0, 0, w, h);
   const bars = an.bars.slice(-40), lines = [[s.tp2, '#3ddc97', 'Т2'], [s.tp1, '#3ddc97', 'Т1'], [s.entry, '#e8eaff', 'Вход'], [s.sl, '#ff5e7a', 'Стоп']];
+  if (s.smc) lines.push([s.smc.sweep, '#ffc65c', 'Ликв.']);
   let mn = Math.min(...bars.map(b => b.l), ...lines.map(l => l[0])), mx = Math.max(...bars.map(b => b.h), ...lines.map(l => l[0])); const pad = (mx - mn) * 0.06; mn -= pad; mx += pad;
   const lblW = w < 230 ? 0 : 0, cw = w - lblW, Y = p => 4 + (mx - p) / (mx - mn) * (h - 8);
   const bw = cw / bars.length;
+  if (s.smc && s.smc.fvg) { const f = s.smc.fvg, k = bars.findIndex(b => b.t >= f.t), x0 = (k < 0 ? 0 : k) * bw; x.fillStyle = 'rgba(139,124,255,.22)'; x.fillRect(x0, Y(f.hi), w - x0, Math.max(2, Y(f.lo) - Y(f.hi))); x.fillStyle = '#b9b0ff'; x.font = '600 9px -apple-system,Inter,sans-serif'; x.fillText('FVG', w - 26, Y(f.hi) + 9); }
   // EMA20
   const e = an.e20.slice(-41, -1); x.strokeStyle = 'rgba(139,124,255,.6)'; x.lineWidth = 1.2; x.beginPath(); let st = false;
   e.forEach((v, i) => { if (v == null) return; const px = i * bw + bw / 2; st ? x.lineTo(px, Y(v)) : (x.moveTo(px, Y(v)), st = true); }); x.stroke();
@@ -283,7 +286,8 @@ async function openCoin(coin, tf, sig) {
   $('#mBybit').href = `https://www.bybit.com/trade/usdt/${coin.base}USDT`; $('#mTv').href = `https://www.tradingview.com/chart/?symbol=BYBIT:${coin.base}USDT.P`;
   $('#mCalc').style.display = sig ? '' : 'none'; setFavBtn(sig);
   let an = S.an[coin.base + tf]; if (!an) { try { an = analyze(await klines(coin, tf), tf); if (an) S.an[coin.base + tf] = an; } catch (e) { } }
-  const kv = []; if (sig) kv.push(['Вход', fmtP(sig.entry)], ['Стоп', `<span class="down">${fmtP(sig.sl)}</span>`], ['Тейк 1 (1.5R)', fmtP(sig.tp1)], ['Тейк 2', `<span class="up">${fmtP(sig.tp2)}</span>`], ['R:R', '1:' + sig.rr.toFixed(2)], ...(sig.atr ? [['Стоп в ATR', (Math.abs(sig.entry - sig.sl) / sig.atr).toFixed(2)]] : []));
+  const kv = []; if (sig) kv.push(['Вход', fmtP(sig.entry)], ['Стоп', `<span class="down">${fmtP(sig.sl)}</span>`], [`Тейк 1 (${(sig.rr1 || 1.5).toFixed(1)}R)`, fmtP(sig.tp1)], ['Тейк 2', `<span class="up">${fmtP(sig.tp2)}</span>`], ['R:R', '1:' + sig.rr.toFixed(2)], ...(sig.atr ? [['Стоп в ATR', (Math.abs(sig.entry - sig.sl) / sig.atr).toFixed(2)]] : []));
+  if (sig && sig.smc) { const m = sig.smc; kv.push(['Снятая ликвидность', `<span style="color:var(--amber)">${fmtP(m.sweep)}${m.eq >= 2 ? ' · равные ×' + m.eq : ''}</span>`], ['FVG (вход)', m.fvg ? `<span style="color:#b9b0ff">${fmtP(m.fvg.lo)} – ${fmtP(m.fvg.hi)}</span>` : 'нет — вход по закрытию'], ['Пулы ликвидности', (m.pools || []).slice(0, 3).map(p => fmtP(p.p) + (p.n > 1 ? ' ×' + p.n : '')).join(' · ') || '—'], ['После TP1', 'стоп в безубыток']); }
   if (an) { const n = an.n; kv.push(['RSI(14)', an.r[n].toFixed(1)], ['ATR(14)', fmtP(an.A[n]) + ` (${(an.A[n] / an.c[n] * 100).toFixed(2)}%)`], ['EMA20 / EMA50', fmtP(an.e20[n]) + ' / ' + fmtP(an.e50[n])], ['VWAP', fmtP(an.vw[n])], ['POC', fmtP(an.vp.poc)], ['VAH / VAL', fmtP(an.vp.vah) + ' / ' + fmtP(an.vp.val)], ['Тренд', an.trend > 0 ? '<span class="up">▲ вверх</span>' : an.trend < 0 ? '<span class="down">▼ вниз</span>' : 'флэт']); }
   kv.push(['Funding', coin.funding == null ? '—' : (coin.funding * 100).toFixed(4) + '%'], ['OI', coin.oiUsd ? fmtBig(coin.oiUsd) + ' $' : '—'], ['Оборот 24ч', fmtBig(coin.turnover) + ' $']);
   $('#mKv').innerHTML = kv.map(([k, v]) => `<div><small>${k}</small>${v}</div>`).join('');
@@ -305,6 +309,15 @@ function drawBig(an, sig) {
   line(an.e20, 'rgba(139,124,255,.9)'); line(an.e50, 'rgba(255,198,92,.85)'); line(an.vw, 'rgba(90,200,250,.7)', 1);
   const pl = (p, color, title, style = 2) => cs.createPriceLine({ price: p, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title });
   pl(an.vp.poc, 'rgba(255,255,255,.45)', 'POC', 1); pl(an.vp.vah, 'rgba(255,255,255,.25)', 'VAH', 3); pl(an.vp.val, 'rgba(255,255,255,.25)', 'VAL', 3);
+  if (sig && sig.smc) { const m = sig.smc; pl(m.sweep, '#ffc65c', 'Снята ликв.', 1);
+    (m.pools || []).forEach(p => pl(p.p, 'rgba(255,198,92,.55)', 'Ликв.' + (p.n > 1 ? ' ×' + p.n : ''), 2));
+    const boxes = []; if (m.fvg) boxes.push([m.fvg, 'rgba(139,124,255,.20)', 'rgba(139,124,255,.75)', 'FVG вход']); if (m.tgtFvg) boxes.push([m.tgtFvg, 'rgba(255,198,92,.12)', 'rgba(255,198,92,.6)', 'FVG цель']);
+    if (boxes.length) { const ov = document.createElement('canvas'); ov.className = 'ovl'; el.appendChild(ov);
+      const draw = () => { if (!chart) return; const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1; ov.width = r.width * dpr; ov.height = r.height * dpr; ov.style.width = r.width + 'px'; ov.style.height = r.height + 'px';
+        const g = ov.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height); const right = r.width - chart.priceScale('right').width();
+        for (const [f, fill, stroke, label] of boxes) { let x0 = chart.timeScale().timeToCoordinate(T(f.t)); if (x0 == null) x0 = 0; const y1 = cs.priceToCoordinate(f.hi), y2 = cs.priceToCoordinate(f.lo); if (y1 == null || y2 == null || x0 > right) continue;
+          g.fillStyle = fill; g.fillRect(x0, y1, right - x0, Math.max(2, y2 - y1)); g.strokeStyle = stroke; g.lineWidth = 1; g.strokeRect(x0 + .5, y1 + .5, right - x0 - 1, Math.max(2, y2 - y1)); g.fillStyle = stroke; g.font = '600 11px -apple-system,Inter,sans-serif'; g.fillText(label, x0 + 4, y1 + 12); } };
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(draw)); chartSeries && (chartSeries.ovl = draw); setTimeout(draw, 60); } }
   if (sig) { pl(sig.entry, '#e8eaff', 'Вход'); pl(sig.sl, '#ff5e7a', 'Стоп'); pl(sig.tp1, '#3ddc97', 'Тейк 1'); pl(sig.tp2, '#3ddc97', 'Тейк 2');
     const mk = sig.fav ? an.bars.filter(b => b.t <= sig.fav.savedAt).pop() : an.closed[sig.barIdx];
     if (mk) cs.setMarkers([{ time: T(mk.t), position: sig.dir === 'long' ? 'belowBar' : 'aboveBar', color: sig.dir === 'long' ? '#3ddc97' : '#ff5e7a', shape: sig.dir === 'long' ? 'arrowUp' : 'arrowDown', text: sig.fav ? '⭐ вход' : TYPE_RU[sig.type] }]); }
@@ -455,7 +468,7 @@ function updatePricesUI() {
     c.dirty = false; c.prevTick = null;
   }
   if (Date.now() - lastMini > 4000 && S.view) { lastMini = Date.now(); $$('#grid canvas.mini').forEach(cv => { const s = S.view[+cv.dataset.i]; if (s && s.coin.tickAt && s.coin.tickAt > (cv._t || 0)) { cv._t = Date.now(); drawMini(cv, s); } }); }
-  if (chartSeries) { const { cs, an, T } = chartSeries, b = an.bars[an.bars.length - 1]; try { cs.update({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); } catch (e) { } }
+  if (chartSeries) { const { cs, an, T } = chartSeries, b = an.bars[an.bars.length - 1]; try { cs.update({ time: T(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); if (chartSeries.ovl) chartSeries.ovl(); } catch (e) { } }
   favLive(); if (DEMO.st) renderDemo(); renderHeader(); setLivePill();
 }
 function setLivePill() {
@@ -483,7 +496,7 @@ function favAdd(s) {
   const now = Date.now();
   const f = { id: favId(s), base: s.coin.base, sym: s.coin.id, prov: PROV, dir: s.dir, type: s.type, tf: s.tf,
     entry: s.entry, sigEntry: s.entry, sl: s.sl, tp1: s.tp1, tp2: s.tp2, rr: s.rr, strength: s.strength, why: s.why, tags: s.tags || [],
-    sigT: s.t, savedAt: now, priceAtSave: s.coin.last, note: '', status: 'active', chkT: now, hi: s.coin.last, lo: s.coin.last, statusAt: null };
+    smc: s.smc || null, sigT: s.t, savedAt: now, priceAtSave: s.coin.last, note: '', status: 'active', chkT: now, hi: s.coin.last, lo: s.coin.last, statusAt: null };
   FAV.items.unshift(f); favSave(true); favCount(); renderFav();
   if (!S.coins.some(c => c.base === f.base)) refreshMarket();
 }
@@ -555,7 +568,7 @@ function favChange(e) { const f = favFind(e), k = e.target.dataset.f; if (!f || 
   if (k !== 'entry') { f.rr = Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12); f.status = 'active'; f.statusAt = null; f.chkT = f.savedAt; f.hi = f.lo = null; favSave(true); renderFav(); favBackfillAll(true); toast('Уровни обновлены — статус пересчитан'); }
   else { f.rr = Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12); favSave(true); renderFav(); toast('Твой вход сохранён'); } }
 function favSig(f) { const c = coinOf(f.base) || { base: f.base, id: PROV === f.prov ? f.sym : f.base + (PROV === 'okx' ? '-USDT-SWAP' : PROV === 'gate' ? '_USDT' : 'USDT'), last: f.last, chg: null, funding: null };
-  return { coin: c, tf: f.tf, type: f.type, dir: f.dir, entry: f.entry, sl: f.sl, tp1: f.tp1, tp2: f.tp2, rr: Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12), strength: f.strength, why: f.why, tags: f.tags || [], fresh: true, t: f.sigT, fav: f }; }
+  return { coin: c, tf: f.tf, type: f.type, dir: f.dir, entry: f.entry, sl: f.sl, tp1: f.tp1, tp2: f.tp2, rr: Math.abs(f.tp2 - f.entry) / Math.abs(f.entry - f.sl || 1e-12), strength: f.strength, why: f.why, tags: f.tags || [], smc: f.smc || null, fresh: true, t: f.sigT, fav: f }; }
 function favClick(e) { const b = e.target.closest('button[data-a]'); if (!b) return; const f = favFind(e); if (!f) return; const a = b.dataset.a;
   if (a === 'chart') { const s = favSig(f); openCoin(s.coin, s.tf, s); }
   else if (a === 'calc') { toCalc(favSig(f)); if (innerWidth <= 820) tab('calc'); else { dtab('signals'); $('#v-calc').scrollIntoView({ behavior: 'smooth' }); } }

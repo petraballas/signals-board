@@ -94,5 +94,98 @@ function detect(an, tf, coin, htfTrend) {
   return out;
 }
 const tfMs = tf => ({ '15m': 9e5, '1h': 36e5, '4h': 144e5 }[tf]);
+/* ---------- SMC / liquidity (separate detector: NOT used by detect(), so callers opt in explicitly) ----------
+   Trigger: liquidity sweep of a swing low/high (wick through, close back inside) on a volume spike.
+   Entry: unmitigated Fair Value Gap (3-candle imbalance) between the sweep and price, else the close.
+   SL beyond the sweep wick. TP1 = nearest opposite liquidity/FVG, TP2 = next liquidity pool. After TP1 → stop to breakeven. */
+function swingPts(b, from, to, k = 3) {
+  const hi = [], lo = [];
+  for (let i = Math.max(k, from); i <= Math.min(b.length - 1 - k, to); i++) {
+    let h = true, l = true;
+    for (let j = 1; j <= k; j++) { if (b[i].h < b[i - j].h || b[i].h <= b[i + j].h) h = false; if (b[i].l > b[i - j].l || b[i].l >= b[i + j].l) l = false; }
+    if (h) hi.push({ i, p: b[i].h }); if (l) lo.push({ i, p: b[i].l });
+  }
+  return { hi, lo };
+}
+function fvgs(b, from, to) { // bull: gap between b[k-2].h and b[k].l ; bear: between b[k].h and b[k-2].l
+  const out = [];
+  for (let k = Math.max(2, from); k <= to; k++) {
+    if (b[k].l > b[k - 2].h) out.push({ dir: 'bull', lo: b[k - 2].h, hi: b[k].l, i: k, t: b[k - 2].t });
+    if (b[k].h < b[k - 2].l) out.push({ dir: 'bear', lo: b[k].h, hi: b[k - 2].l, i: k, t: b[k - 2].t });
+  }
+  return out;
+}
+function poolsOf(pts, a, isHigh, tol = 0.2) { // cluster equal highs/lows → liquidity pools
+  const s = pts.slice().sort((x, y) => x.p - y.p), cl = [];
+  for (const q of s) { const l = cl[cl.length - 1]; if (l && q.p - l.max <= tol * a) { l.max = q.p; l.sum += q.p; l.n++; l.last = Math.max(l.last, q.i); } else cl.push({ min: q.p, max: q.p, sum: q.p, n: 1, last: q.i }); }
+  return cl.map(c => ({ p: isHigh ? c.max : c.min, lo: c.min, hi: c.max, n: c.n, i: c.last }));
+}
+function detectSMC(an, tf, coin, htfTrend) {
+  const { closed: b, r, A, vp, lv, n } = an; const out = [];
+  if (!b || b.length < 120) return out;
+  const W = 150, st = n - W;
+  for (let i = n; i >= n - 4; i--) { // i = sweep bar (up to 4 bars back, so the displacement + FVG can form after it)
+    const x = b[i], a = A[i]; if (!a) continue;
+    const vavg = b.slice(i - 20, i).reduce((s, y) => s + y.v, 0) / 20, vr = Math.max(x.v, i < n ? b[i + 1].v : 0) / (vavg || 1);
+    if (vr < 1.3) continue; // volume spike confirmation
+    const range = x.h - x.l || 1e-12, sw = swingPts(b, st, i - 3);
+    for (const L of [true, false]) {
+      // swept swing: price wicked through it on bar i and closed back inside; it was intact before bar i
+      const cand = (L ? sw.lo : sw.hi).filter(q => q.i >= i - 80 && (L ? x.l < q.p && x.c > q.p : x.h > q.p && x.c < q.p));
+      const intact = q => { for (let j = q.i + 1; j < i; j++) if (L ? b[j].l < q.p : b[j].h > q.p) return false; return true; };
+      const swept = cand.filter(intact); if (!swept.length) continue;
+      const wick = L ? (Math.min(x.o, x.c) - x.l) / range : (x.h - Math.max(x.o, x.c)) / range;
+      if (wick < 0.3) continue;
+      // the liquidity that was taken: deepest swept level + how many equal lows/highs sat there
+      const lvl = L ? Math.min(...swept.map(q => q.p)) : Math.max(...swept.map(q => q.p));
+      const eq = (L ? sw.lo : sw.hi).filter(q => Math.abs(q.p - lvl) <= 0.2 * a).length;
+      // FVG entry zone: unmitigated, same direction, between the sweep extreme and the close
+      // FVG left by the displacement after the sweep (k-2 >= sweep bar - 1), still unmitigated up to the last closed bar
+      const unmit = g => { for (let j = g.i + 1; j <= n; j++) if (L ? b[j].l <= g.lo : b[j].h >= g.hi) return false; return true; };
+      const fvg = fvgs(b, i + 1, n).filter(g => g.dir === (L ? 'bull' : 'bear') && unmit(g) && (L ? g.lo > x.l : g.hi < x.h) && g.hi - g.lo >= 0.05 * a)
+        .sort((p, q) => L ? q.hi - p.hi : p.lo - q.lo)[0] || null;
+      if (!fvg && i < n - 1) continue; // older sweep only counts with a fresh FVG to enter from
+      let entry = x.c, limit = false;
+      if (fvg) { const mid = (fvg.lo + fvg.hi) / 2; if (Math.abs(b[n].c - mid) <= 1.5 * a) { entry = mid; limit = true; } else if (i < n - 1) continue; }
+      let sl = L ? x.l - 0.2 * a : x.h + 0.2 * a, risk = L ? entry - sl : sl - entry;
+      if (risk < 0.4 * a) { risk = 0.4 * a; sl = L ? entry - risk : entry + risk; }
+      if (risk > 3.5 * a) continue;
+      // targets: opposite liquidity pools (equal highs/lows first) and opposite FVGs
+      const opp = poolsOf(L ? sw.hi : sw.lo, a, L).filter(pl => L ? pl.p > entry + risk : pl.p < entry - risk).sort((p, q) => L ? p.p - q.p : q.p - p.p);
+      const oppF = fvgs(b, st, n).filter(g => g.dir === (L ? 'bear' : 'bull') && (L ? g.lo > entry + risk : g.hi < entry - risk) && unmit(g)).map(g => ({ p: L ? g.lo : g.hi, n: 0, fvg: g }));
+      const tgts = opp.concat(oppF).sort((p, q) => L ? p.p - q.p : q.p - p.p);
+      let tp1 = tgts[0] ? tgts[0].p : (L ? entry + 1.5 * risk : entry - 1.5 * risk);
+      if (Math.abs(tp1 - entry) / risk > 4) tp1 = L ? entry + 1.5 * risk : entry - 1.5 * risk;
+      const pool2 = opp.filter(pl => L ? pl.p > tp1 + 0.3 * a : pl.p < tp1 - 0.3 * a).sort((p, q) => (q.n - p.n) || (L ? p.p - q.p : q.p - p.p))[0];
+      let tp2 = pool2 && Math.abs(pool2.p - entry) / risk <= 6 ? pool2.p : (L ? entry + Math.max(2.5 * risk, Math.abs(tp1 - entry) * 1.6) : entry - Math.max(2.5 * risk, Math.abs(tp1 - entry) * 1.6));
+      if (Math.abs(tp2 - entry) / risk < 2) tp2 = L ? entry + 2 * risk : entry - 2 * risk;
+      // still valid? no SL / TP1 after the signal bar
+      let dead = false; for (const y of an.bars.slice(i + 1)) if (L ? (y.l <= sl || y.h >= tp1) : (y.h >= sl || y.l <= tp1)) { dead = true; break; }
+      if (dead) continue;
+      const zone = (lv || []).filter(l => l.n >= 2 && Math.abs(l.p - lvl) <= 0.6 * a)[0];
+      let sc = 1, tags = ['SMC'];
+      if (vr >= 1.8) { sc += 1; tags.push('объём ×' + vr.toFixed(1)); } else { sc += 0.5; tags.push('объём ×' + vr.toFixed(1)); }
+      if (eq >= 2) { sc += 1; tags.push(`равные ${L ? 'минимумы' : 'максимумы'} ×${eq}`); }
+      if (fvg) { sc += 0.5; tags.push('FVG'); }
+      if (zone) { sc += 0.5; tags.push('зона S/R'); }
+      const dirN = L ? 1 : -1; if (htfTrend === dirN) { sc += 1; tags.push('тренд ст. ТФ ✓'); } else if (htfTrend === -dirN) { sc -= 0.5; tags.push('против ст. ТФ'); }
+      if (vp && (L ? Math.abs(lvl - vp.val) < a : Math.abs(lvl - vp.vah) < a)) { sc += 0.5; tags.push(L ? 'у VAL' : 'у VAH'); }
+      if (r[i] != null && ((L && r[i] > 72) || (!L && r[i] < 28))) { sc -= 1; tags.push('RSI перегрет'); }
+      const rr = Math.abs(tp2 - entry) / risk; if (rr >= 3) sc += 0.5;
+      if (Math.round(sc) < 2) continue;
+      tags.push('после TP1 — стоп в б/у');
+      const t2why = pool2 ? `ликвидность ${L ? 'над' : 'под'} ${fmtP(tp2)}` : `${fmtP(tp2)}`;
+      const why = `Снятие ликвидности ${L ? 'под' : 'над'} ${fmtP(lvl)}${eq >= 2 ? ` (равные ${L ? 'лои' : 'хаи'} ×${eq})` : ''} + возврат` +
+        (fvg ? `, FVG ${fmtP(fvg.lo)}–${fmtP(fvg.hi)}${limit ? ' (вход лимиткой в середину)' : ''}` : '') + `, цель — ${t2why}`;
+      out.push({ key: coin.base + tf + 'smc' + (L ? 'long' : 'short'), coin, tf, type: 'smc', dir: L ? 'long' : 'short', entry, sl, tp1, tp2, lvl, rr, rr1: Math.abs(tp1 - entry) / risk,
+        strength: Math.max(1, Math.min(5, Math.round(sc))), t: x.t + tfMs(tf), barIdx: i, fresh: i >= n - 1 || limit, rsi: r[i], vr, atr: a, vp, why, tags,
+        smc: { sweep: lvl, sweepIdx: i, eq, fvg: fvg ? { lo: fvg.lo, hi: fvg.hi, t: fvg.t } : null, sweepT: x.t, limit, be: true,
+          pools: opp.slice(0, 4).map(pl => ({ p: pl.p, n: pl.n })), tgtFvg: (tgts[0] && tgts[0].fvg) ? { lo: tgts[0].fvg.lo, hi: tgts[0].fvg.hi, t: tgts[0].fvg.t } : null } });
+    }
+    if (out.length) break;
+  }
+  return out.sort((p, q) => q.strength - p.strength || q.rr - p.rr);
+}
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { fmtP, ema, rsi, atr, vwapRolling, volProfile, levels, trendOf, analyze, detect, tfMs, VWAPN, HTF };
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { fmtP, ema, rsi, atr, vwapRolling, volProfile, levels, trendOf, analyze, detect, detectSMC, swingPts, fvgs, tfMs, VWAPN, HTF };
