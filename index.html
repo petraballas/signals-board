@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Signals — доска сигналов Bybit</title>
-<meta name="description" content="Визуальная доска сигналов по фьючерсам Bybit USDT: пробои, отскоки, откаты. Не финансовый совет.">
+<title>Signals — сигналы и скринер Bybit</title>
+<meta name="description" content="Доска сигналов и скринер аномальных движений по фьючерсам Bybit USDT. Не финансовый совет.">
 <meta name="theme-color" content="#05060d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <div class="blobs"><i></i><i></i><i></i></div>
@@ -62,7 +62,7 @@
 
     <!-- center -->
     <section class="center-col">
-      <div class="dnav desk-only"><button data-dtab="signals" class="on">📡 Сигналы</button><button data-dtab="fav">⭐ Избранное <span class="favCnt"></span></button></div>
+      <div class="dnav desk-only"><button data-dtab="signals" class="on">📡 Сигналы</button><button data-dtab="screener">◎ Скринер</button><button data-dtab="fav">⭐ Избранное <span class="favCnt"></span></button></div>
       <div class="view on" id="v-signals">
         <!-- mobile summary -->
         <div class="summary glass mob-only">
@@ -139,6 +139,117 @@
           <p style="margin:6px 0"><b>💧 SMC / Ликвидность</b> — снятие ликвидности: свеча прокалывает свинг-минимум/максимум (часто равные лои/хаи) и закрывается обратно, на всплеске объёма. Вход — лимиткой в FVG (имбаланс из 3 свечей), если он остался после импульса, иначе по закрытию. Стоп за фитилём снятия. TP1 — ближайшая ликвидность/FVG с другой стороны, TP2 — следующий пул ликвидности. После TP1 стоп переносится в безубыток. На большом графике рисуются FVG-зоны и уровни ликвидности.</p>
           <p style="margin:6px 0"><b>Сила ★</b> учитывает: тренд старшего ТФ, объём, положение к VWAP и Volume Profile (POC/VAH/VAL), RSI, funding, R:R. Стопы считаются от ATR(14).</p>
           <p style="margin:6px 0" class="mut">Сигналы считаются только по закрытым свечам. Вход — цена закрытия сигнальной свечи; если цена ушла далеко от входа, лучше дождаться ретеста.</p>
+          <p style="margin:6px 0"><b>◎ Скринер</b> — отдельная вкладка. Ищет аномалии на бессрочных USDT Bybit: движение за 5м / 15м / 1ч / 4ч, всплеск объёма к своему среднему, изменение открытого интереса и «прострел» (длинный фитиль снял уровень и закрылся обратно). Пороги хранятся в браузере. Строка в таблице — повод открыть монету и проверить, не команда на сделку.</p>
+        </div>
+      </div>
+
+      <div class="view" id="v-screener">
+        <div class="head">
+          <div>
+            <h1>Скринер</h1>
+            <p>Аномалии на бессрочных USDT Bybit · срок 1ч–4ч. Цена, объём, OI и funding — чтобы решить, смотреть ли монету. Не команда на вход.</p>
+          </div>
+          <div class="right">
+            <button type="button" class="iconbtn" id="scSound" title="Звук сигналов">🔊</button>
+            <button type="button" class="iconbtn" id="scNotify" title="Разрешить уведомления браузера" style="width:auto;padding:0 12px;font-size:13px">🔔 Уведомления</button>
+            <button type="button" class="iconbtn" id="scRefresh" title="Обновить сейчас"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+          </div>
+        </div>
+        <div class="status" aria-live="polite">
+          <span class="pill" id="scSrc">Источник: Bybit v5</span>
+          <span class="pill live" id="scLive">○ ожидание</span>
+          <span id="scUpd">Открой вкладку — скринер запросит публичные данные Bybit.</span>
+          <span id="scCnt"></span>
+        </div>
+        <div class="progress"><i id="scProg"></i></div>
+
+        <div class="sc-set glass">
+          <div class="sc-set-h">
+            <h3>Пороги <span class="dim" style="font-weight:500;font-size:12px">хранятся на этом устройстве</span></h3>
+            <button type="button" class="ghost" id="scReset" style="width:auto;padding:8px 12px">↺ Сбросить</button>
+          </div>
+          <div class="sc-grid">
+            <div class="field"><label>Памп 5м, %</label><div class="inp"><input id="scP5" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Памп 15м, %</label><div class="inp"><input id="scP15" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Памп 1ч, %</label><div class="inp"><input id="scP1" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Памп 4ч, %</label><div class="inp"><input id="scP4" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Дамп 5м, %</label><div class="inp"><input id="scD5" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Дамп 15м, %</label><div class="inp"><input id="scD15" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Дамп 1ч, %</label><div class="inp"><input id="scD1" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Дамп 4ч, %</label><div class="inp"><input id="scD4" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Объём, × к среднему</label><div class="inp"><input id="scVol" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Прострел, доля фитиля</label><div class="inp"><input id="scWick" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Мин. оборот 24ч, млн $</label><div class="inp"><input id="scTurn" inputmode="decimal" autocomplete="off"></div></div>
+            <div class="field"><label>Глубокий скан, монет</label><div class="inp"><input id="scMax" inputmode="numeric" autocomplete="off"></div></div>
+            <div class="field"><label>Обновление, сек</label>
+              <div class="seg" id="scEvery"><button type="button" data-v="30">30</button><button type="button" data-v="45">45</button><button type="button" data-v="60">60</button></div>
+            </div>
+            <div class="field"><label>Окно метки OI</label>
+              <div class="seg" id="scOiWin"><button type="button" data-v="5m">5м</button><button type="button" data-v="15m">15м</button><button type="button" data-v="1h">1ч</button><button type="button" data-v="4h">4ч</button></div>
+            </div>
+          </div>
+          <p class="dim" style="font-size:12px;margin:8px 0 0">Памп — рост не меньше порога, дамп — падение не меньше порога. Свечи и открытый интерес запрашиваются только у топа по |движению 24ч| среди монет с достаточным оборотом, чтобы не упираться в лимит Bybit.</p>
+        </div>
+
+        <div class="sc-tools">
+          <div class="chips" id="scFilters">
+            <button type="button" class="chip" data-f="anomaly">Аномалии</button>
+            <button type="button" class="chip" data-f="pump">Пампы</button>
+            <button type="button" class="chip" data-f="dump">Дампы</button>
+            <button type="button" class="chip" data-f="wick">Прострел</button>
+            <button type="button" class="chip" data-f="volume">Объём</button>
+            <button type="button" class="chip" data-f="all">Все сканированные</button>
+          </div>
+          <div class="sc-tools-r">
+            <input class="search" id="scQ" placeholder="монета, например SOL" autocomplete="off">
+            <select class="iconbtn" id="scSort" style="width:auto;padding:0 10px;font-size:13px;height:40px">
+              <option value="heat">Сначала аномалии</option>
+              <option value="5m">По |5м|</option>
+              <option value="15m">По |15м|</option>
+              <option value="1h">По |1ч|</option>
+              <option value="4h">По |4ч|</option>
+              <option value="vol">По объёму</option>
+              <option value="oi">По |OI|</option>
+              <option value="funding">По |funding|</option>
+              <option value="turn">По обороту</option>
+              <option value="24h">По |24ч|</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="glass sc-table-wrap">
+          <table class="sc">
+            <thead>
+              <tr>
+                <th class="sticky" data-k="heat">Монета</th>
+                <th>Цена</th>
+                <th data-k="24h">24ч</th>
+                <th data-k="5m">5м</th>
+                <th data-k="15m">15м</th>
+                <th data-k="1h">1ч</th>
+                <th data-k="4h">4ч</th>
+                <th data-k="vol">Объём</th>
+                <th data-k="oi5">OI 5м</th>
+                <th data-k="oi15">OI 15м</th>
+                <th data-k="oi1">OI 1ч</th>
+                <th data-k="oi4">OI 4ч</th>
+                <th>Метка OI</th>
+                <th data-k="funding">Funding</th>
+                <th>Прострел</th>
+              </tr>
+            </thead>
+            <tbody id="scBody"></tbody>
+          </table>
+        </div>
+        <div class="sc-cards" id="scCards"></div>
+        <div class="sc-legend glass">
+          <b>Как читать метку OI</b> (окно выбирается выше, по умолчанию 1ч).
+          Цена вверх и OI вверх — <span class="up">сильный тренд</span> (набор позиций).
+          Цена вверх и OI вниз — <span style="color:var(--amber)">слабый рост</span> (закрытие шортов).
+          Цена вниз и OI вниз — <span style="color:var(--amber)">слабое падение</span> (закрытие лонгов).
+          Цена вниз и OI вверх — <span class="down">сильный слив</span> (набор шортов).
+          Прострел — свеча с длинным фитилём, которая сняла крайний уровень и закрылась обратно: кандидат на возврат к среднему.
+          Уведомления и звук — только о новых сигналах, пока открыта эта вкладка браузера, и только как повод проверить график.
         </div>
       </div>
     </section>
@@ -167,6 +278,7 @@
 
 <nav class="tabbar glass">
   <button data-tab="signals" class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>Сигналы</button>
+  <button data-tab="screener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 12 16.8 8.2"/></svg>Скринер</button>
   <button data-tab="fav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Избранное<i class="tbadge favCnt"></i></button>
   <button data-tab="markets"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>Рынки</button>
   <button data-tab="calc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M8 18h2M12 18h2M16 11v7"/></svg>Калькулятор</button>
@@ -183,8 +295,22 @@
   <div class="links"><a href="#" id="mFav" class="favbtn">⭐ В избранное / Я вошёл</a><a href="#" id="mCalc">▦ В калькулятор</a><a href="#" id="mBybit" target="_blank" rel="noopener">Открыть на Bybit ↗</a><a href="#" id="mTv" target="_blank" rel="noopener">TradingView ↗</a></div>
 </div></div>
 
+<div class="modal" id="scModal"><div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="scTitle">
+  <div class="hd"><div><h2 id="scTitle">—</h2><div class="mut" style="font-size:13px" id="scSub"></div></div><button type="button" class="iconbtn close" id="scClose">✕</button></div>
+  <div id="scBadges" style="margin:6px 0 10px"></div>
+  <canvas id="scSpark" width="640" height="120" style="width:100%;height:120px;display:block"></canvas>
+  <div class="kv" id="scKv"></div>
+  <div class="reason" id="scWhy" style="font-size:14px;margin-top:10px"></div>
+  <div class="links">
+    <a href="#" id="scBybit" target="_blank" rel="noopener">Открыть на Bybit ↗</a>
+    <a href="#" id="scTv" target="_blank" rel="noopener">TradingView ↗</a>
+  </div>
+  <p class="dim" style="font-size:12px;margin:10px 0 0">Сигнал для проверки, не торговая рекомендация. Сайт ничего не торгует и не просит ключи.</p>
+</div></div>
+
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer onerror="window.__lwcFail=1"></script>
 <script src="core.js?v=7" defer></script>
-<script src="app.js?v=7" defer></script>
+<script src="app.js?v=8" defer></script>
+<script src="screener.js?v=8" defer></script>
 </body>
 </html>
