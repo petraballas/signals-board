@@ -304,7 +304,31 @@ a.mdemo .dgo{align-self:center;font-size:20px}
 @media (max-width:1100px){
   .sc-grid{grid-template-columns:1fr 1fr}
 }
+/* ---- statistics ---- */
+.st-wrap{max-width:980px}
+.st-nums{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
+.st-num{padding:12px 14px}
+.st-num span{display:block;font-size:12px;color:var(--mut)}
+.st-num b{display:block;margin-top:3px;font-size:22px;font-weight:700}
+.st-note{margin:0 0 14px;color:var(--mut);font-size:13px;line-height:1.45}
+.st-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.st-block{padding:12px 14px}
+.st-block h3{margin:0 0 8px;font-size:15px}
+.st{width:100%;border-collapse:collapse;font-size:13px}
+.st th,.st td{padding:7px 8px;text-align:right;border-top:1px solid rgba(255,255,255,.06)}
+.st th{color:var(--mut);font-weight:500;font-size:12px;border-top:0}
+.st th:first-child,.st td:first-child{text-align:left;font-weight:650}
+@media (min-width:821px){
+  #v-stats{display:none}
+  body.dstat .main{grid-template-columns:1fr}
+  body.dstat .side-col,body.dstat .calc-col{display:none}
+  body.dstat .center-col>.view{display:none}
+  body.dstat #v-stats{display:block}
+}
 @media (max-width:820px){
+  .st-nums{grid-template-columns:1fr 1fr}
+  .st-nums .st-num:first-child{grid-column:1/-1}
+  .st-grid{grid-template-columns:1fr}
   .sc-grid{grid-template-columns:1fr 1fr}
   .sc-grid .field label{font-size:11px;line-height:1.25;min-height:2.5em}
   .sc-table-wrap{display:none}
