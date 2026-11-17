@@ -405,7 +405,20 @@ function wire() {
   addEventListener('pageshow', e => { if (e.persisted) { refreshMarket(); startLive(); } });
   addEventListener('online', () => { refreshMarket(); startLive(); });
 }
-function tab(t) { if (t === 'fav') renderFav(); $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t)); scrollTo(0, 0); if (t === 'signals') renderSignals(); }
+function tab(t) {
+  if (t === 'fav') renderFav();
+  $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t));
+  document.body.classList.toggle('dfav', t === 'fav');
+  document.body.classList.toggle('dscr', t === 'screener');
+  document.body.classList.toggle('dstat', t === 'stats');
+  const d = t === 'fav' || t === 'screener' || t === 'stats' ? t : 'signals';
+  $$('.dnav button').forEach(b => b.classList.toggle('on', b.dataset.dtab === d));
+  scrollTo(0, 0);
+  if (t === 'signals') renderSignals();
+  if (window.Screener) window.Screener.setActive(t === 'screener');
+  if (window.Stats) window.Stats.setActive(t === 'stats');
+}
 
 /* ---------- live prices (WebSocket, with provider fallback) ---------- */
 const now = () => Math.floor(Date.now() / 1000);
@@ -590,7 +603,22 @@ function favImport(e) {
     catch (x) { toast('Не похоже на файл избранного'); } e.target.value = ''; };
   r.readAsText(file);
 }
-function dtab(t) { document.body.classList.toggle('dfav', t === 'fav'); $$('.dnav button').forEach(b => b.classList.toggle('on', b.dataset.dtab === t)); if (t === 'fav') renderFav(); }
+function dtab(t) {
+  document.body.classList.toggle('dfav', t === 'fav');
+  document.body.classList.toggle('dscr', t === 'screener');
+  document.body.classList.toggle('dstat', t === 'stats');
+  $$('.dnav button').forEach(b => b.classList.toggle('on', b.dataset.dtab === t));
+  if (t === 'fav' || t === 'screener' || t === 'stats') {
+    $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+    $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t));
+  } else {
+    $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === 'signals'));
+    $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-signals'));
+  }
+  if (t === 'fav') renderFav();
+  if (window.Screener) window.Screener.setActive(t === 'screener');
+  if (window.Stats) window.Stats.setActive(t === 'stats');
+}
 function openFavTab() { if (innerWidth <= 820) tab('fav'); else dtab('fav'); scrollTo(0, 0); }
 setInterval(() => { if (!document.hidden) favBackfillAll(); }, 6e4);
 favCount();
@@ -636,6 +664,11 @@ loadDemo(); setInterval(() => { if (!document.hidden) loadDemo(); }, 45e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - DEMO.at > 3e4) loadDemo(); });
 
 /* ---------- boot ---------- */
+window.SBStats = {
+  boardReady: () => !!S.lastScan,
+  signals: () => (S.signals || []).map(s => ({ base: s.coin && s.coin.base, dir: s.dir, type: s.type, tf: s.tf })),
+  favs: () => FAV.items.slice(),
+};
 wire(); syncFilterUI(); calc();
 refreshMarket().then(refreshSignals);
 // REST price polling: every 60s normally, every 8s whenever the live stream is not healthy
