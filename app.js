@@ -36,7 +36,7 @@ const P = {
         nextFunding: +x.nextFundingTime || null }));
     },
     async klines(id, tf, limit = 300) {
-      const iv = { '15m': '15', '1h': '60', '4h': '240' }[tf];
+      const iv = { '5m': '5', '15m': '15', '1h': '60', '4h': '240' }[tf];
       const j = await getJSON(`${this.base}/v5/market/kline?category=linear&symbol=${id}&interval=${iv}&limit=${limit}`);
       if (j.retCode !== 0) throw new Error('API ' + j.retMsg);
       return j.result.list.map(r => ({ t: +r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4], v: +r[6] })).reverse();
@@ -56,7 +56,7 @@ const P = {
         turnover: +x.volCcy24h * +x.last, funding: null, oiUsd: null }));
     },
     async klines(id, tf, limit = 300) {
-      const bar = { '15m': '15m', '1h': '1H', '4h': '4H' }[tf];
+      const bar = { '5m': '5m', '15m': '15m', '1h': '1H', '4h': '4H' }[tf];
       const j = await getJSON(`${this.base}/api/v5/market/candles?instId=${id}&bar=${bar}&limit=${limit}`);
       return j.data.map(r => ({ t: +r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4], v: +r[7] })).reverse();
     },
@@ -185,6 +185,8 @@ async function refreshSignals() {
   });
   S.signals = found; S.lastScan = new Date();
   renderSignals(); renderMarkets(); renderHeader();
+  if (window.Journal) window.Journal.ingest(found);
+  if (window.Journal && window.Journal.ingestHistory) window.Journal.ingestHistory();
   $('#upd').textContent = 'Обновлено ' + timeStr(S.lastScan) + ' · ' + S.coins.length + ' монет · авто каждые 3 мин';
   setTimeout(() => prog.style.width = '0', 600);
   S.loading = false; $('#refresh').classList.remove('spin');
@@ -666,8 +668,47 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Da
 /* ---------- boot ---------- */
 window.SBStats = {
   boardReady: () => !!S.lastScan,
-  signals: () => (S.signals || []).map(s => ({ base: s.coin && s.coin.base, dir: s.dir, type: s.type, tf: s.tf })),
+  signals: () => (S.signals || []).map(s => ({ base: s.coin && s.coin.base, dir: s.dir, type: s.type, tf: s.tf, entry: s.entry, sl: s.sl, tp1: s.tp1, tp2: s.tp2, t: s.t })),
   favs: () => FAV.items.slice(),
+  bars: (base, tf) => {
+    const an = S.an[base + tf];
+    return an && an.bars && an.bars.length ? an.bars : null;
+  },
+  klines: (base, tf) => {
+    const c = typeof coinOf === 'function' ? coinOf(base) : null;
+    const coin = c || { base, id: PROV === 'okx' ? base + '-USDT-SWAP' : PROV === 'gate' ? base + '_USDT' : base + 'USDT' };
+    return klines(coin, tf);
+  },
+  // Setups the board's own detector would have printed on earlier closed bars of this scan.
+  // Higher-timeframe trend is taken from the HTF bar that had already closed by then.
+  historySignals: () => {
+    const out = [];
+    const look = 16;
+    for (const c of S.coins) {
+      for (const tf of CFG.TFS) {
+        const an = S.an[c.base + tf];
+        if (!an || !an.bars || an.bars.length < 100) continue;
+        const bars = an.bars;
+        const hAn = S.an[c.base + HTF[tf]];
+        const lastClosed = bars.length - 2;
+        for (let i = Math.max(90, lastClosed - look); i <= lastClosed; i++) {
+          const a = analyze(bars.slice(0, i + 2), tf);
+          if (!a) continue;
+          let htfTrend = 0;
+          if (hAn && hAn.closed && hAn.closed.length) {
+            let hi = 0;
+            for (let k = 0; k < hAn.closed.length; k++) if (hAn.closed[k].t <= bars[i].t) hi = k;
+            htfTrend = trendOf(hAn.c, hAn.e20, hAn.e50, hi) || 0;
+          }
+          let found = [];
+          try { found = detect(a, tf, c, htfTrend) || []; } catch (e) { found = []; }
+          try { const sm = detectSMC(a, tf, c, htfTrend); if (sm && sm[0]) found.push(sm[0]); } catch (e) {}
+          for (const s of found) out.push(s);
+        }
+      }
+    }
+    return out;
+  },
 };
 wire(); syncFilterUI(); calc();
 refreshMarket().then(refreshSignals);
@@ -675,4 +716,4 @@ refreshMarket().then(refreshSignals);
 setInterval(() => { if (document.hidden) return; const age = Date.now() - (S.lastMarket || 0); if (age > CFG.REFRESH_MARKET || (!liveOk() && age > 8e3)) refreshMarket(); }, 4e3);
 setInterval(() => { if (!document.hidden && S.coins.length && !liveOk() && Date.now() - LIVE.started > 15e3) startLive(); setLivePill(); }, 5e3);
 setInterval(() => { if (!document.hidden) refreshSignals(); }, CFG.REFRESH_SIGNALS);
-setInterval(() => { if (S.lastScan) $('#upd').textContent = 'Обновлено ' + timeStr(S.lastScan) + ' · авто каждые 3 мин'; }, 30e3);
+setInterval(() => { if (S.lastScan && !S.loading) $('#upd').textContent = 'Обновлено ' + timeStr(S.lastScan) + ' · ' + S.coins.length + ' монет · авто каждые 3 мин'; }, 30e3);

@@ -14,7 +14,7 @@
   const SRC_BOARD = 'Доска';
 
   function arr(v) { return Array.isArray(v) ? v : []; }
-  function blank() { return { n: 0, win: 0, loss: 0, flat: 0, mixed: 0, open: 0, unresolved: 0 }; }
+  function blank() { return { n: 0, win: 0, loss: 0, flat: 0, mixed: 0, open: 0, notTriggered: 0, unresolved: 0 }; }
   function add(c, outcome) { c.n++; if (blank()[outcome] !== undefined && outcome !== 'n') c[outcome]++; else c.unresolved++; }
   function count(items) { const c = blank(); for (const it of items) add(c, it.outcome); return c; }
   function rate(c) { const d = c.win + c.loss; return d ? c.win / d : null; }
@@ -58,8 +58,12 @@
       return row(SRC_FAV, f, 'unresolved', st ? String(st) : 'нет статуса');
     });
   }
-  function fromBoard(signals) {
-    return arr(signals).map(s => row(SRC_BOARD, s, 'unresolved', 'исход не записан'));
+  function fromJournal(items) {
+    const known = { win: 1, loss: 1, open: 1, notTriggered: 1, flat: 1, mixed: 1, unresolved: 1 };
+    return arr(items).map(s => {
+      const outcome = s && known[s.outcome] ? s.outcome : 'unresolved';
+      return row(SRC_BOARD, s, outcome, (s && (s.result || s.detail)) || (outcome === 'unresolved' ? 'нет свечей' : ''));
+    });
   }
   function orderedSources(all, flags) {
   const g = group(all, i => i.source);
@@ -91,18 +95,19 @@ function group(items, keyFn) {
     const src = input || {};
     const paper = src.paper || null;
     const tracked = (paper ? fromPaper(paper) : []).concat(fromFav(src.favs));
-    const boardKnown = src.board != null;
-    const board = boardKnown ? fromBoard(src.board) : [];
+    const boardKnown = src.journal != null;
+    const board = boardKnown ? fromJournal(src.journal) : [];
     const all = tracked.concat(board);
     const counts = count(all);
     return {
       counts,
       winrate: rate(counts),
-      openTp1: tracked.filter(i => i.outcome === 'open' && i.tp1Hit).length,
+      openTp1: all.filter(i => i.outcome === 'open' && i.tp1Hit).length,
+      waiting: all.filter(i => i.detail === 'waiting' || i.result === 'waiting').length,
       bySource: orderedSources(all, { demo: !!paper, board: boardKnown }),
-      byDir: group(tracked, i => i.dir),
-      byType: group(tracked, i => i.type),
-      byCoin: group(tracked, i => i.base && i.base !== '—' ? i.base : ''),
+      byDir: group(all, i => i.dir),
+      byType: group(all, i => i.type),
+      byCoin: group(all, i => i.base && i.base !== '—' ? i.base : ''),
       paperMissing: !paper,
       boardKnown,
       exchange: paper && paper.source ? String(paper.source) : '',
@@ -111,7 +116,7 @@ function group(items, keyFn) {
     };
   }
 
-  return { summarize, pickPaper, count, fromPaper, fromFav, SRC_DEMO, SRC_FAV, SRC_BOARD };
+  return { summarize, pickPaper, count, fromPaper, fromFav, fromJournal, SRC_DEMO, SRC_FAV, SRC_BOARD };
 });
 
 (function () {
@@ -146,22 +151,20 @@ function group(items, keyFn) {
     try { if (window.SBStats && window.SBStats.favs) return window.SBStats.favs() || []; } catch (e) {}
     try { const a = JSON.parse(localStorage.getItem('sb_fav_v1') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
   }
-  function board() {
-    try {
-      if (!window.SBStats || !window.SBStats.boardReady || !window.SBStats.boardReady()) return null;
-      return window.SBStats.signals() || [];
-    } catch (e) { return null; }
+  function journal() {
+    try { if (window.Journal && window.Journal.items) return window.Journal.items(); } catch (e) {}
+    return null;
   }
   function snapshot() {
-    return C.summarize({ paper: paperMissing ? null : paper, favs: favs(), board: board() });
+    return C.summarize({ paper: paperMissing ? null : paper, favs: favs(), journal: journal() });
   }
   function card(label, value, cls) {
     return '<div class="st-num glass"><span>' + esc(label) + '</span><b class="' + (cls || '') + '">' + esc(value) + '</b></div>';
   }
   function table(title, rows, labelOf) {
     if (!rows.length) return '';
-    const body = rows.slice(0, 12).map(r => '<tr><td>' + esc(labelOf(r.key)) + '</td><td class="up">' + num(r.win) + '</td><td class="down">' + num(r.loss) + '</td><td>' + num(r.open) + '</td><td class="mut">' + num(r.unresolved) + '</td><td>' + pct(r.winrate) + '</td></tr>').join('');
-    return '<section class="st-block glass"><h3>' + esc(title) + '</h3><table class="st"><thead><tr><th></th><th>Плюс</th><th>Минус</th><th>Открыто</th><th>Без исхода</th><th>Винрейт</th></tr></thead><tbody>' + body + '</tbody></table></section>';
+    const body = rows.slice(0, 12).map(r => '<tr><td>' + esc(labelOf(r.key)) + '</td><td class="up">' + num(r.win) + '</td><td class="down">' + num(r.loss) + '</td><td>' + num(r.open) + '</td><td class="mut">' + num(r.notTriggered) + '</td><td>' + pct(r.winrate) + '</td></tr>').join('');
+    return '<section class="st-block glass"><h3>' + esc(title) + '</h3><table class="st"><thead><tr><th></th><th>Плюс</th><th>Минус</th><th>Открыто</th><th>Не вход</th><th>Винрейт</th></tr></thead><tbody>' + body + '</tbody></table></section>';
   }
   function render() {
     const live = $('stLive'), upd = $('stUpd'), nums = $('stNums'), note = $('stNote'), grid = $('stGrid');
@@ -172,6 +175,9 @@ function group(items, keyFn) {
     else if (paperErr && paperMissing) { live.className = 'pill live'; live.textContent = '○ нет демо-счёта'; }
     else { live.className = 'pill live on'; live.textContent = '● записанные сделки'; }
     const bits = [];
+    let jstat = '';
+    try { jstat = window.Journal && window.Journal.status ? window.Journal.status() : ''; } catch (e) {}
+    if (jstat) bits.push(jstat);
     if (s.exchange) bits.push('биржа демо-счёта: ' + s.exchange);
     if (s.paperAt) bits.push('прогон ' + new Date(s.paperAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
     if (paperErr) bits.push(paperErr);
@@ -181,15 +187,17 @@ function group(items, keyFn) {
       card('Плюс', num(c.win), 'up'),
       card('Минус', num(c.loss), 'down'),
       card('Открыто', num(c.open)),
-      card('Без исхода', num(c.unresolved), 'mut'),
+      card('Не вход', num(c.notTriggered), 'mut'),
     ].join('');
     const extra = [];
-    if (s.openTp1) extra.push('Из открытых TP1 уже взят у ' + s.openTp1 + ' — это ещё не закрытый плюс.');
+    extra.push('Винрейт = плюс / (плюс + минус). Плюс на доске — TP1 или TP2 раньше стопа. Одна свеча, где есть и стоп, и тейк, считается стопом, если свечи 5м не показывают другой порядок.');
+    extra.push('Журнал доски лежит в этом браузере: у сайта нет фоновой задачи, а state.json демо-счёта хранит только сделки бота. Пока страница открыта, исход берётся из свечей той же биржи. Сигнал, ушедший с доски, в журнале остаётся.');
+    if (s.waiting) extra.push('Ещё ждут вход: ' + s.waiting + '.');
+    if (s.openTp1) extra.push('Из открытых демо/избранного TP1 уже взят у ' + s.openTp1 + ' — это ещё не закрытый плюс.');
     if (c.flat) extra.push('Безубыток без TP1: ' + c.flat + '.');
     if (c.mixed) extra.push('Смешанные (TP1, потом стоп): ' + c.mixed + '.');
-    if (!s.boardKnown) extra.push('Доска сигналов ещё не посчитана.');
-    else extra.push('На доске сейчас ' + (s.bySource.find(r => r.key === C.SRC_BOARD) || { n: 0 }).n + ' сигналов без записанного исхода.');
-    if (s.seenSignals != null) extra.push('Последний проход бота видел ' + s.seenSignals + ' сигналов — это снимок, не журнал, в винрейт не входит.');
+    if (c.unresolved) extra.push('Без однозначного исхода и не в винрейте: ' + c.unresolved + '.');
+    if (!s.boardKnown) extra.push('Доска в этом браузере ещё не сканировалась.');
     note.textContent = extra.join(' ');
     const srcLabel = k => k === C.SRC_DEMO ? 'Демо-счёт' : k === C.SRC_FAV ? 'Избранное' : k === C.SRC_BOARD ? 'Доска' : k;
     grid.innerHTML = [
@@ -199,7 +207,8 @@ function group(items, keyFn) {
       table('Монета', s.byCoin, k => k),
     ].join('');
   }
-  async function refresh() {
+  async function refresh(load) {
+    if (load === false) { render(); return; }
     if (busy) return;
     busy = true;
     const btn = $('stRefresh'); if (btn) btn.classList.add('spin');
@@ -221,6 +230,7 @@ function group(items, keyFn) {
         refresh();
         timer = setInterval(() => { if (!document.hidden && active) refresh(); }, 60000);
       },
+      refresh,
     };
     render();
     if (location.hash === '#stats') {
