@@ -907,7 +907,8 @@
       if ([...sel.options].some(o => o.value === cfg.sort)) sel.value = cfg.sort;
       render();
     });
-    $('scReset').addEventListener('click', () => {
+    $('scReset').addEventListener('click', e => {
+      e.stopPropagation();
       const sound = cfg.sound;
       cfg = C.clampCfg(C.DEFAULTS);
       cfg.sound = sound;
@@ -915,6 +916,23 @@
       saveCfg();
       fillForm();
       if (running) scan(true); else render();
+    });
+    const SET_KEY = 'sb_screener_set_open';
+    const setPanel = on => {
+      const box = $('scSet'); if (!box) return;
+      box.classList.toggle('collapsed', !on);
+      const btn = $('scFold');
+      if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      const lbl = $('scFoldLbl');
+      if (lbl) lbl.textContent = on ? 'Свернуть' : 'Развернуть';
+    };
+    let setOpen = true;
+    try { if (localStorage.getItem(SET_KEY) === '0') setOpen = false; } catch (e) {}
+    setPanel(setOpen);
+    $('scFold').addEventListener('click', () => {
+      setOpen = $('scSet').classList.contains('collapsed');
+      setPanel(setOpen);
+      try { localStorage.setItem(SET_KEY, setOpen ? '1' : '0'); } catch (e) {}
     });
     $('scRefresh').addEventListener('click', () => { unlockAudio(); running = true; scan(true); });
     $('scSound').addEventListener('click', () => {

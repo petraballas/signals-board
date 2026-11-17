@@ -51,7 +51,7 @@ test('favorites use only the stored status', () => {
 });
 
 test('winrate ignores open, flat, mixed, unresolved and an empty book', () => {
-  const s = S.summarize({ paper: paper(), favs: [{ base: 'SOL', dir: 'long', type: 'smc', status: 'tp2' }, { base: 'WIF', dir: 'short', type: 'bounce', status: 'stop' }, { base: 'PEPE', dir: 'long', type: 'breakout', status: 'tp1stop' }], board: [{ base: 'RNDR', dir: 'long', type: 'breakout' }] });
+  const s = S.summarize({ paper: paper(), favs: [{ base: 'SOL', dir: 'long', type: 'smc', status: 'tp2' }, { base: 'WIF', dir: 'short', type: 'bounce', status: 'stop' }, { base: 'PEPE', dir: 'long', type: 'breakout', status: 'tp1stop' }], journal: [{ base: 'RNDR', dir: 'long', type: 'breakout' }] });
   // wins: TP2, TP1+BE, fav tp2 = 3; losses: SL, LIQ, fav stop = 3
   assert.equal(s.counts.win, 3);
   assert.equal(s.counts.loss, 3);
@@ -61,7 +61,7 @@ test('winrate ignores open, flat, mixed, unresolved and an empty book', () => {
   assert.ok(s.counts.unresolved >= 4);
   assert.equal(s.winrate, 0.5);
   assert.equal(s.openTp1, 1);
-  assert.equal(S.summarize({ paper: { balance: 1, closed: [], positions: [], pending: [] }, favs: [], board: null }).winrate, null);
+  assert.equal(S.summarize({ paper: { balance: 1, closed: [], positions: [], pending: [] }, favs: [], journal: null }).winrate, null);
   const demo = s.bySource.find(r => r.key === 'Демо-счёт');
   const board = s.bySource.find(r => r.key === 'Доска');
   assert.equal(demo.win, 2);
@@ -69,8 +69,34 @@ test('winrate ignores open, flat, mixed, unresolved and an empty book', () => {
   assert.equal(board.win, 0);
   const shorts = s.byDir.find(r => r.key === 'short');
   assert.ok(shorts.win >= 1 && shorts.loss >= 1);
-  assert.equal(s.byCoin.some(r => r.key === 'RNDR'), false);
+  assert.equal(s.byCoin.some(r => r.key === 'RNDR' && r.unresolved === 1 && r.win === 0), true);
   assert.equal(s.seenSignals, 2);
+});
+
+test('board journal wins enter the winrate, not-triggered stays out', () => {
+  const s = S.summarize({
+    paper: { balance: 1, closed: [], positions: [], pending: [] },
+    favs: [],
+    journal: [
+      { base: 'SOL', dir: 'long', type: 'breakout', outcome: 'win', result: 'TP2' },
+      { base: 'WIF', dir: 'short', type: 'bounce', outcome: 'loss', result: 'SL' },
+      { base: 'OP', dir: 'long', type: 'pullback', outcome: 'notTriggered', result: 'expired' },
+      { base: 'TIA', dir: 'short', type: 'smc', outcome: 'notTriggered', result: 'waiting' },
+      { base: 'BTC', dir: 'long', type: 'breakout', outcome: 'open', result: 'open' },
+      { base: 'ETH', dir: 'short', type: 'bounce', outcome: 'unresolved', result: 'no-bars' },
+    ],
+  });
+  assert.equal(s.counts.win, 1);
+  assert.equal(s.counts.loss, 1);
+  assert.equal(s.counts.open, 1);
+  assert.equal(s.counts.notTriggered, 2);
+  assert.equal(s.counts.unresolved, 1);
+  assert.equal(s.winrate, 0.5);
+  assert.equal(s.waiting, 1);
+  assert.equal(s.byDir.find(r => r.key === 'long').win, 1);
+  assert.equal(s.byType.find(r => r.key === 'bounce').loss, 1);
+  assert.equal(s.byCoin.find(r => r.key === 'OP').notTriggered, 1);
+  assert.equal(s.bySource.find(r => r.key === 'Доска').winrate, 0.5);
 });
 
 test('a missing paper account is not reported as zero trades', () => {
